@@ -1,6 +1,6 @@
 ---
 name: mutation-testing
-description: Measure test quality with mutation testing and close the gaps it finds. Use when asked whether tests are any good, when coverage is high but confidence is low, after AI wrote or changed tests, or when the user mentions mutation testing, mutation score, or surviving mutants.
+description: Measure test quality with mutation testing and close the gaps it finds. Use when asked whether tests are any good, when coverage is high but confidence is low, after AI wrote or changed tests, or when the user mentions mutation testing, mutation score, surviving mutants, or names a mutation tool (Stryker, Pitest, mutmut, Infection, cargo-mutants).
 ---
 
 # Mutation testing
@@ -15,15 +15,23 @@ test suite tells.
 Reference files sit beside this file. If you fetched this over HTTP instead of
 from disk, fetch them from
 `https://raw.githubusercontent.com/dmoka/skills/main/skills/mutation-testing/references/tools.md`
-and `.../references/gotchas.md`.
+and
+`https://raw.githubusercontent.com/dmoka/skills/main/skills/mutation-testing/references/gotchas.md`.
 
 ## The loop
 
-1. **Baseline.** Run the full test suite. If it is red or flaky, stop and
-   report BLOCKED — mutation tools refuse red baselines, and flaky tests
-   poison every verdict. Never exclude a failing test to get a number.
-2. **Pick the tool** for the stack (table below). Install and configure it
-   per [references/tools.md](references/tools.md).
+1. **Baseline.** Run the full test suite twice. Red: report BLOCKED —
+   mutation tools refuse red baselines. A verdict that changes between the
+   two runs is a flaky test: fix or quarantine it first, or every mutant
+   verdict is noise. If the only tests are e2e/CI-only, or the suite takes
+   more than a few minutes locally, report BLOCKED too — mutation testing
+   needs a fast local unit suite, and that gap is the finding. In a monorepo,
+   work inside the package that owns the target module. Never exclude a
+   failing test to get a number.
+2. **Pick the tool** for the stack (table below). Install it project-local
+   and configure it per [references/tools.md](references/tools.md) — never
+   run a tool's interactive init wizard; write the config file yourself. Ask
+   before any global install.
 3. **Scope the first run to one module** — the most business-critical file
    the user names, or the one where a silent bug costs the most (money math,
    permissions, data writes). A whole-repo first run on a real codebase takes
@@ -41,9 +49,10 @@ and `.../references/gotchas.md`.
    the killing test and rerun the tool to confirm the kill. For equivalents:
    prove it, label it, move on — traps in
    [references/gotchas.md](references/gotchas.md).
-8. **Report**: the score, ranked survivors with their one-sentence lies,
-   equivalents with proofs, tests added, and what the score cannot see
-   (below).
+8. **Report**, in this order: score; ranked survivors with their
+   one-sentence lies; equivalents with proofs; tests added, each with its
+   confirmed kill; what the score cannot see (below); every file you added
+   or changed, including tool output you cleaned up.
 
 ## Tools by stack
 
@@ -71,9 +80,14 @@ Setup, config, and scoped-run commands for each: [references/tools.md](reference
   surviving mutant in payment code is red. Do not chase 100%: equivalent
   mutants make it unreachable, and demanding it makes the loop unable to
   converge.
-- **Source code is read-only for you unless the user says otherwise.** Your
-  lane is tests. If killing a mutant would require a source change, that is a
-  finding to report, not an edit to make.
+- **Scope may widen between runs, never narrow.** Re-scoping away from hard
+  survivors is score-gaming. If a tool scopes through a persistent config
+  file, widen or remove that scope when you finish — a leftover narrow scope
+  is an inherited exclusion for the next person.
+- **Production source is read-only.** Tests, build files, and tool config are
+  yours to add and change — the report lists every file you touched. If
+  killing a mutant would require a source change, that is a finding to
+  report, not an edit to make.
 
 ## What the score cannot see
 
@@ -83,6 +97,9 @@ completely absent feature scores 100%. When you report a score, say plainly
 which risks it does not cover — the missing-code blind spot and other limits
 are in [references/gotchas.md](references/gotchas.md).
 
+There is no universal good score. Gate on "no new survivors in changed
+code", not on an absolute number.
+
 ## Done means
 
 - No surviving mutant can change an amount, a permission, or a stored record
@@ -91,6 +108,9 @@ are in [references/gotchas.md](references/gotchas.md).
 - Every survivor is explained in one sentence a non-tester understands.
 - Every test you added asserts a business outcome and was confirmed to kill
   its mutant in a rerun.
+- The repo is clean: tool output directories are deleted or gitignored, any
+  scope you wrote into config is widened or removed, and the report lists
+  every file you added or changed.
 
 A high score with unexplained survivors is not done. A finished report with
 three explained, ranked survivors the user chose to accept is.

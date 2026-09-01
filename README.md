@@ -33,9 +33,19 @@ you can run yourself.
 
 ## Install permanently (Claude Code)
 
+For one project:
+
 ```bash
 git clone https://github.com/dmoka/skills
+mkdir -p your-project/.claude/skills
 cp -r skills/skills/mutation-testing your-project/.claude/skills/
+```
+
+For all your projects, copy it to `~/.claude/skills/` instead:
+
+```bash
+mkdir -p ~/.claude/skills
+cp -r skills/skills/mutation-testing ~/.claude/skills/
 ```
 
 Claude Code discovers it automatically. Other agents: point them at the
