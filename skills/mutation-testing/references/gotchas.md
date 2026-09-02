@@ -1,5 +1,31 @@
 # Gotchas — the ways mutation results lie to you
 
+## Scores from different tools are not comparable
+
+Every tool ships its own mutator set, and they differ by more than most
+people expect. Stryker and Pitest rewrite a comparison one boundary at a time
+(`>=` → `>`), which is exactly the probe that finds off-by-one errors.
+cargo-mutants mostly replaces whole function bodies and flips an operator to
+its opposite (`<=` → `>`), which never lands on the boundary. So a 100% from
+cargo-mutants is a far weaker statement than a 100% from Stryker — verified:
+a crate at 100% still passed every test with a real off-by-one planted at its
+threshold.
+
+Two consequences for the report:
+
+- Name the tool next to the score. "100% (cargo-mutants)" and "100%
+  (Stryker)" are different claims.
+- Before trusting a high score, look at what was actually generated —
+  `cargo mutants --list`, Stryker's HTML report, Pitest's mutator summary.
+  If no mutant probes a boundary you care about, the score says nothing
+  about that boundary.
+
+**Constants that never bind are a common shared blind spot.** A cap like
+`min(raw, 500)` produces no useful mutant when every test input lands below
+the cap: the capped branch is never taken, so nothing distinguishes 500 from
+5000. Several tools miss this entirely. When code has a limit, check by hand
+that some test actually reaches it.
+
 ## Equivalent mutants
 
 Some mutants change the code without changing behavior (`i < len` vs

@@ -18,12 +18,21 @@ from disk, fetch them from
 and
 `https://raw.githubusercontent.com/dmoka/skills/main/skills/mutation-testing/references/gotchas.md`.
 
+**Fetch raw text, not a summary.** Many agents have a fetch tool that runs a
+page through a summarizing model. It will paraphrase this file, drop the
+numbered steps, and mangle the config snippets you are about to copy. If your
+fetch returns prose rather than the literal markdown below, refetch with
+`curl -sSL <url>` and work from that.
+
 ## The loop
 
 1. **Baseline.** Run the full test suite twice. Red: report BLOCKED —
    mutation tools refuse red baselines. A verdict that changes between the
-   two runs is a flaky test: fix or quarantine it first, or every mutant
-   verdict is noise. If the only tests are e2e/CI-only, or the suite takes
+   two runs is a flaky test, and every mutant verdict downstream of it is
+   noise. Quarantine it (skip it, with a comment saying why and what a human
+   must decide) unless you can see the actual defect and the fix is in the
+   test — never invent a spec to "fix" a test toward. If the only tests are
+   e2e/CI-only, or the suite takes
    more than a few minutes locally, report BLOCKED too — mutation testing
    needs a fast local unit suite, and that gap is the finding. In a monorepo,
    work inside the package that owns the target module. Never exclude a
@@ -34,9 +43,14 @@ and
    before any global install.
 3. **Scope the first run to one module** — the most business-critical file
    the user names, or the one where a silent bug costs the most (money math,
-   permissions, data writes). A whole-repo first run on a real codebase takes
-   hours and often dies; a one-module run finishes in minutes and proves the
-   point. Widen the scope only after the first run succeeds.
+   permissions, data writes). If nobody names one, pick it yourself: the
+   README or package layout usually says where the business logic lives, and
+   the money math is the file to start on. Say which file you chose and why.
+   A whole-repo first run on a real codebase takes hours and often dies; a
+   one-module run finishes in minutes and proves the point. Widen the scope
+   only after the first run succeeds. On a project small enough that one
+   module *is* the whole codebase, say so and move on — do not invent a
+   narrower scope to satisfy this step.
 4. **Run** the tool and parse the report.
 5. **Explain every surviving mutant** in one sentence a non-tester
    understands: what the mutant changed, why the suite stayed green, and what
@@ -87,7 +101,15 @@ Setup, config, and scoped-run commands for each: [references/tools.md](reference
 - **Production source is read-only.** Tests, build files, and tool config are
   yours to add and change — the report lists every file you touched. If
   killing a mutant would require a source change, that is a finding to
-  report, not an edit to make.
+  report, not an edit to make. Where a language keeps unit tests inside the
+  source file (Rust's `#[cfg(test)] mod tests`, Python doctests), you may add
+  tests to that file — never touch the code above them, and say in the report
+  that you edited a source file and why.
+- **Stay inside the repo.** Scratch scripts, downloaded copies of this skill,
+  and equivalence checks belong in the project's own ignored scratch space or
+  your agent workspace — not a sibling directory, not the system temp dir. Do
+  not delete or rewrite machine state outside the repo to make a test
+  deterministic; if a test depends on such state, that is a finding.
 
 ## What the score cannot see
 
@@ -96,6 +118,13 @@ A business rule that was never implemented generates no mutants, so a
 completely absent feature scores 100%. When you report a score, say plainly
 which risks it does not cover — the missing-code blind spot and other limits
 are in [references/gotchas.md](references/gotchas.md).
+
+**A score is only as strong as the tool's mutators.** These tools are not
+equivalent: some rewrite operators one boundary at a time, others only
+replace whole function bodies. A 100% from a weak mutator set can sit on top
+of an untested off-by-one. Report the score with the tool's name and its
+known blind spots, never as a bare percentage — the per-tool limits are in
+[references/gotchas.md](references/gotchas.md).
 
 There is no universal good score. Gate on "no new survivors in changed
 code", not on an absolute number.
@@ -110,7 +139,10 @@ code", not on an absolute number.
   its mutant in a rerun.
 - The repo is clean: tool output directories are deleted or gitignored, any
   scope you wrote into config is widened or removed, and the report lists
-  every file you added or changed.
+  every file you added or changed. Check this on the filesystem, not with
+  `git status` — some tools write their own `.gitignore` into their output
+  directory, so `git status` reports clean while hundreds of megabytes
+  accumulate. Name any output you chose to keep, and where it is.
 
 A high score with unexplained survivors is not done. A finished report with
 three explained, ranked survivors the user chose to accept is.

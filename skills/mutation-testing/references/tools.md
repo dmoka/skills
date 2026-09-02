@@ -14,6 +14,10 @@ These tools drop output into the repo: `mutants/`, `.stryker-tmp/`,
 
 Version numbers and flags drift. If a command below fails, check the tool's
 current docs before improvising — do not switch tools because one flag moved.
+To confirm a current version, read the registry's own metadata (Maven
+Central's `maven-metadata.xml`, `npm view <pkg> version`, the NuGet flat
+index) — search-endpoint results are ranked, not sorted by release, and will
+hand you a stale number.
 
 ## JavaScript / TypeScript — StrykerJS
 
@@ -77,7 +81,7 @@ dependency, so ship the full block:
 <plugin>
   <groupId>org.pitest</groupId>
   <artifactId>pitest-maven</artifactId>
-  <version>1.30.0</version> <!-- check Maven Central for latest -->
+  <version>1.30.0</version> <!-- latest: repo1.maven.org/maven2/org/pitest/pitest-maven/maven-metadata.xml -->
   <dependencies>
     <dependency>
       <groupId>org.pitest</groupId>
@@ -129,18 +133,42 @@ mutmut show <mutant-name>   # diff of one mutant; names come from results
 ```
 
 - Never open `mutmut browse` — it is an interactive TUI.
+- **Delete `mutants/` before every confirming rerun.** mutmut caches verdicts
+  and the cache goes stale: after you add a test that genuinely kills a
+  mutant, a plain `mutmut run` reports the *old* survivors and prints
+  `0.00 mutations/second`, meaning it re-executed nothing. It logs
+  `Found N new tests` while still serving stale results, so the run looks
+  legitimate. `rm -rf mutants && mutmut run` gives the true score. Verified
+  against mutmut 3.7.0.
 - The scope persists in `pyproject.toml`: widen or remove it when you finish.
 - mutmut copies the source tree into a `mutants/` directory in the repo —
   gitignore or delete it before reporting.
-- mutmut caches results; reruns only retest affected mutants. Tests must be
-  runnable via `pytest` from the repo root.
+- Tests must be runnable via `pytest` from the repo root.
 - Windows: mutmut requires `fork`, so it runs only under WSL.
 
 ## Rust — cargo-mutants
 
 ```bash
-cargo install cargo-mutants   # installs per-user (~/.cargo) — this is the global install to ask about
+cargo install cargo-mutants   # Rust has no project-local binary install; this is always per-user (~/.cargo). Ask first.
 ```
+
+**Read the score with care — cargo-mutants has a narrow mutator set.** It
+mostly replaces whole function bodies with fixed values (`true`, `false`,
+`0`, `Default::default()`) and swaps a relational operator for its opposite
+(`<=` → `>`). It does *not* generate the adjacent-boundary mutant
+(`<=` → `<`) that Stryker and Pitest use to probe off-by-one errors. A
+verified consequence: a crate scoring **100%** still passed every test after
+`units <= LOW_STOCK_THRESHOLD` was changed to `units < LOW_STOCK_THRESHOLD`,
+because no test covered the exact threshold and no mutant existed to expose
+it. Run `cargo mutants --list` to see exactly what is being tested, and state
+in the report that boundary conditions are outside what this score covers.
+
+There is no config file to write — scope is a per-invocation `-f` flag, so
+nothing persists and there is no scope to widen afterwards.
+
+Rust keeps unit tests in the source file under `#[cfg(test)] mod tests`.
+Adding a test there means editing a file in `src/`; that is allowed, but say
+so in the report and never touch the code above the test module.
 
 Scoped first run:
 
@@ -169,8 +197,11 @@ starts an interactive wizard:
 Scoped first run:
 
 ```bash
-vendor/bin/infection --filter=src/Billing/RefundService.php --threads=4 --no-progress
+vendor/bin/infection src/Billing/RefundService.php --threads=4 --no-progress
 ```
+
+The file to mutate is a positional argument. The older `--filter=` flag still
+runs but has been deprecated since Infection 0.34 and prints a warning.
 
 - Report: console + `infection.log`.
 - Needs Xdebug or PCOV for coverage; PCOV is much faster.

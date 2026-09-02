@@ -7,11 +7,15 @@ Agent skills by [Daniel Moka](https://danielmoka.com) — battle-tested practice
 Paste this into Claude Code, Cursor, or any agent that can fetch a URL:
 
 ```
-Read https://raw.githubusercontent.com/dmoka/skills/main/skills/mutation-testing/SKILL.md
-and the reference files it links, then run its loop on this project.
+Fetch the raw text of
+https://raw.githubusercontent.com/dmoka/skills/main/skills/mutation-testing/SKILL.md
+and the reference files it links (use curl, not a summarizing fetch tool),
+then run its loop on this project.
 ```
 
-That's the whole install for a first run.
+That's the whole install for a first run. The "use curl" part matters: some
+agents' built-in fetch tools summarize a page instead of returning it, which
+quietly paraphrases the instructions away.
 
 ## The skills
 
