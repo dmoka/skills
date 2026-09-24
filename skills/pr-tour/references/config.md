@@ -79,7 +79,8 @@ range: `{ "gte": 100, "lt": 400 }`).
 | `areas` | any non-noise file is in one of these named areas | `["money"]` |
 | `paths` | any changed file matches one of these globs | `["src/**"]` |
 | `onlyPaths` | every changed file matches one of these globs | `["docs/**"]` |
-| `linesChanged` | additions + deletions | number |
+| `linesChanged` | additions + deletions a human reads (noise excluded) | number |
+| `linesChangedAll` | all additions + deletions, noise included | number |
 | `filesChanged` | changed files | number |
 | `ageDays` | whole days since the PR was opened | number |
 | `draft` | the PR is a draft | boolean |

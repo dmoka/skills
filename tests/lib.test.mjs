@@ -79,8 +79,8 @@ test("rules: all conditions must hold, evidence is returned", () => {
   const pr = { additions: 500, deletions: 10, changedFiles: 1, createdAt: new Date(Date.now() - 5 * 864e5).toISOString(), labels: [], author: { login: "x" } };
   const f = prFacts(pr, fs, cfg);
   assert.deepEqual(evalRule({ when: { areas: ["money"] } }, f), ["area money"]);
-  assert.ok(evalRule({ when: { linesChanged: { gt: 400 }, ageDays: { gte: 5 } } }, f));
-  assert.equal(evalRule({ when: { linesChanged: { gt: 400 }, draft: true } }, f), null);
+  assert.ok(evalRule({ when: { linesChangedAll: { gt: 400 }, ageDays: { gte: 5 } } }, f));
+  assert.equal(evalRule({ when: { linesChangedAll: { gt: 400 }, draft: true } }, f), null);
   assert.ok(evalRule({ when: { onlyPaths: ["src/**"] } }, f));
   assert.ok(evalRule({ when: { srcWithoutTests: true } }, f));
 });
@@ -132,4 +132,11 @@ test("intent: informative titles, issue refs, status by strongest source", async
   assert.equal(intentStatus([{ type: "title", text: "Speed up booking tests" }]), "title only");
   assert.equal(intentStatus([{ type: "commits", text: "x" }, { type: "title", text: "wip" }]), "described");
   assert.equal(intentStatus([{ type: "spec", text: "x" }]), "spec");
+});
+
+test("linesChanged counts only what a human reads", () => {
+  const fs = files(diff("package-lock.json", "@@ -1,2 +1,2 @@\n-a\n-b\n+c\n+d\n") + diff("src/a.ts", "@@ -1 +1 @@\n-x\n+y\n"));
+  const f = prFacts({ additions: 3, deletions: 3, createdAt: new Date().toISOString(), labels: [] }, fs, null);
+  assert.equal(f.linesChanged, 2);
+  assert.equal(f.linesChangedAll, 6);
 });

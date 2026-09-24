@@ -361,7 +361,7 @@ function firstLine(f) {
 // ---------- PR-level facts for triage rules ----------
 
 export const CONDITIONS = [
-  "areas", "paths", "onlyPaths", "linesChanged", "filesChanged", "ageDays", "draft", "labels",
+  "areas", "paths", "onlyPaths", "linesChanged", "linesChangedAll", "filesChanged", "ageDays", "draft", "labels",
   "author", "skippedTestsAdded", "srcWithoutTests", "addedLinesMatch", "destructiveSql", "assertionsRemoved",
 ];
 
@@ -372,7 +372,9 @@ export function prFacts(pr, files, cfg, now = Date.now()) {
   return {
     paths: files.map((f) => f.path),
     areas: [...new Set(files.flatMap((f) => (f.meta.noise ? [] : f.meta.areas)))],
-    linesChanged: pr.additions + pr.deletions,
+    // Lines a human reads: noise (lockfiles, generated, renames, formatting) excluded.
+    linesChanged: files.filter((f) => !f.meta.noise).reduce((n, f) => n + f.additions + f.deletions, 0),
+    linesChangedAll: pr.additions + pr.deletions,
     filesChanged: pr.changedFiles ?? files.length,
     ageDays: Math.floor((now - Date.parse(pr.createdAt)) / 86400000),
     draft: !!pr.isDraft,
