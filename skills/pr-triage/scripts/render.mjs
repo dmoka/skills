@@ -370,7 +370,7 @@ ${noise.map((o) => { const f = files.get(o.path); return `<details class="row" i
   <section><h3>Intent <span class="count" style="text-transform:none;letter-spacing:0;color:var(--dim)">the author's words</span></h3>${intent}</section>
   <section><h3>What the diff does <span class="tag tag-model">MODEL</span></h3>${r.whatItDoes ? `<div class="model">${md(r.whatItDoes)}</div>` : `<div class="empty">Not annotated yet.</div>`}</section>
   <section class="full"><h3>Intent map <span class="count" style="text-transform:none;letter-spacing:0;color:var(--dim)">the author's words → the files they explain · MODEL mapping, quotes and files checked</span></h3>${imap}</section>
-  <section class="full"><h3>Claims to check</h3>${claims}</section>
+  ${r.claims.length ? `<section class="full"><h3>Claims to check</h3>${claims}</section>` : ""}
   <section class="full"><h3>Where to look <span class="count" style="text-transform:none;letter-spacing:0;color:var(--dim)">${items.length} items · FACT = computed from the diff · LOOK HERE = model, line-checked · ASK WHY = no stated reason</span></h3><div class="items">${itemRows}</div></section>
 </div>
 <h2>Reading order <span class="count">${esc(r.orderRule)}</span></h2>
