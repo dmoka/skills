@@ -9,7 +9,7 @@
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { SCHEMA_VERSION, CONFIG_PATH, gh, ghJson, resolveRepo, parseArgs, loadConfig, parseDiff, classify, prFacts, evalRule } from "./lib.mjs";
+import { SCHEMA_VERSION, CONFIG_PATH, gh, ghJson, resolveRepo, parseArgs, loadConfig, parseDiff, classifyAll, prFacts, evalRule } from "./lib.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const configPath = args.config ?? CONFIG_PATH;
@@ -38,7 +38,7 @@ const ranked = [];
 for (const pr of prs) {
   process.stderr.write(`  #${pr.number} ${pr.title.slice(0, 60)}\n`);
   const files = parseDiff(gh(["pr", "diff", String(pr.number)], { repo }));
-  for (const f of files) f.meta = classify(f, cfg);
+  classifyAll(files, cfg);
   const facts = prFacts(pr, files, cfg, now);
   const matched = [];
   for (const rule of rules) {

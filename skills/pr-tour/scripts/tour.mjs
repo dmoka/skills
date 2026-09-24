@@ -10,7 +10,7 @@
 
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SCHEMA_VERSION, CONFIG_PATH, gh, ghJson, resolveRepo, parseArgs, loadConfig, parseDiff, classify, computeFacts, readingOrder, DEFAULT_READING_ORDER } from "./lib.mjs";
+import { SCHEMA_VERSION, CONFIG_PATH, gh, ghJson, resolveRepo, parseArgs, loadConfig, parseDiff, classifyAll, computeFacts, readingOrder, DEFAULT_READING_ORDER } from "./lib.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const configPath = args.config ?? CONFIG_PATH;
@@ -48,7 +48,7 @@ for (const issue of pr.closingIssuesReferences ?? []) {
 }
 
 const files = parseDiff(diffText);
-for (const f of files) f.meta = classify(f, cfg);
+classifyAll(files, cfg);
 const facts = computeFacts(files, cfg);
 const order = readingOrder(files, facts, cfg);
 

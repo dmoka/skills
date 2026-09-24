@@ -102,3 +102,20 @@ test("reading order: hotspot first, test after its code, noise last", () => {
     ["package-lock.json", "noise"],
   ]);
 });
+
+test("mechanical rename: symbol swaps are noise, a swapped string literal is not", async () => {
+  const { classifyAll } = await import("../shared/lib.mjs");
+  const t = "diff --git a/src/db/orders-repo.ts b/src/db/bookings-repo.ts\nsimilarity index 82%\nrename from src/db/orders-repo.ts\nrename to src/db/bookings-repo.ts\n--- a/src/db/orders-repo.ts\n+++ b/src/db/bookings-repo.ts\n@@ -1 +1 @@\n-export type NewOrder = typeof orders.$inferInsert;\n+export type NewBooking = typeof orders.$inferInsert;\n" +
+    diff("src/services/orders.ts", "@@ -1,2 +1,2 @@\n-import { insertOrder } from \"../db/orders-repo\";\n-  return insertOrder(tx, row);\n+import { insertBooking } from \"../db/bookings-repo\";\n+  return insertBooking(tx, row);\n") +
+    diff("src/db/schema.ts", "@@ -1 +1 @@\n-export const orders = pgTable(\"orders\", {\n+export const orders = pgTable(\"bookings\", {\n");
+  const fs = classifyAll(parseDiff(t), null);
+  assert.deepEqual(fs.map((f) => f.meta.noise), ["mechanical rename", "mechanical rename", null]);
+});
+
+test("formatting only: a closing line aligned as context on one side", () => {
+  const [f] = files(diff("app/t.tsx", "@@ -1,3 +1,4 @@\n-<a>{x}</a><b>\n+<a>{x}</a>\n+</c>\n+<b>\n </c>\n"));
+  // old side: <a>{x}</a><b></c>   new side: <a>{x}</a></c><b></c> — NOT the same text
+  assert.equal(f.meta.noise, null);
+  const [g] = files(diff("app/u.tsx", "@@ -1,2 +1,3 @@\n-const a = f('x', b)\n+const a = f(\n+  \"x\", b,\n+)\n ;\n"));
+  assert.equal(g.meta.noise, "formatting only");
+});

@@ -209,9 +209,77 @@ export function areasOf(path, cfg) {
   return Object.entries(cfg?.areas ?? {}).filter(([, globs]) => matchAny(path, globs)).map(([name]) => name);
 }
 
-// Whitespace, quotes, commas, semicolons and parens only: prettier-style churn.
-function normalizeFormat(lines) {
-  return lines.map((l) => l.s).join("").replace(/[\s,;()]/g, "").replace(/['`]/g, '"');
+// Whitespace, quotes, commas, semicolons, parens and JSX {" "} only:
+// prettier-style churn. Compares whole hunk sides (context included), because
+// a diff often aligns a moved closing line as context on one side only.
+function normalizeFormat(f, side) {
+  const drop = side === "new" ? "del" : "add";
+  return f.hunks.flatMap((h) => h.lines.filter((l) => l.t !== drop)).map((l) => l.s).join("")
+    .replace(/['`]/g, '"').replace(/\{"\s*"\}/g, "").replace(/[\s,;()]/g, "");
+}
+
+// "orders-repo" -> "bookings-repo" gives [["orders", "bookings"]] plus case variants.
+function renameSwaps(files) {
+  const words = (p) => stemFull(p).replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const swaps = new Map();
+  for (const f of files) {
+    if (f.status !== "renamed" || !f.oldPath) continue;
+    const a = words(f.oldPath);
+    const b = words(f.path);
+    if (a.length !== b.length) continue;
+    a.forEach((w, i) => { if (w !== b[i]) swaps.set(w, b[i]); });
+  }
+  const out = [];
+  const cap = (w) => w[0].toUpperCase() + w.slice(1);
+  for (const [x, y] of swaps) {
+    const pairs = [[x, y]];
+    if (x.endsWith("s") && y.endsWith("s")) pairs.push([x.slice(0, -1), y.slice(0, -1)]); // orders -> order
+    for (const [a, b] of pairs) out.push([a, b], [cap(a), cap(b)], [a.toUpperCase(), b.toUpperCase()]);
+  }
+  return out;
+}
+const stemFull = (p) => p.split("/").pop().replace(/\.[^.]+$/, "");
+
+// A file whose every changed token is exactly one of the rename swaps.
+function isMechanicalRename(f, swaps) {
+  if (!swaps.length) return false;
+  const apply = (t) => swaps.reduce((acc, [x, y]) => acc.split(x).join(y), t);
+  for (const h of f.hunks) {
+    const dels = h.lines.filter((l) => l.t === "del");
+    const adds = h.lines.filter((l) => l.t === "add");
+    if (dels.length !== adds.length) return false;
+    for (let i = 0; i < dels.length; i++) {
+      // Token by token: each token is unchanged or exactly swapped.
+      const a = dels[i].s.split(/(\W+)/);
+      const b = adds[i].s.split(/(\W+)/);
+      if (a.length !== b.length) return false;
+      const importLine = IMPORT_LINE.test(dels[i].s);
+      let quotes = 0;
+      for (let j = 0; j < a.length; j++) {
+        if (a[j] !== b[j]) {
+          if (apply(a[j]) !== b[j]) return false;
+          // A swap inside a string literal ("orders" table name) is a behaviour
+          // change, not a rename — allowed only in import paths.
+          if (quotes % 2 === 1 && !importLine) return false;
+        }
+        quotes += (a[j].match(/["'`]/g) || []).length;
+      }
+    }
+  }
+  return f.additions + f.deletions > 0;
+}
+
+// Classifies every file of one PR; needs the whole PR to see rename swaps.
+export function classifyAll(files, cfg) {
+  const swaps = renameSwaps(files);
+  for (const f of files) {
+    f.meta = classify(f, cfg);
+    if (!f.meta.noise && isMechanicalRename(f, swaps)) {
+      f.meta.noise = "mechanical rename";
+      f.meta.kind = "noise";
+    }
+  }
+  return files;
 }
 
 const IMPORT_LINE = /^\s*(import\b|export\s+(\*|\{[^}]*\})\s+from\b|from\s+\S+\s+import\b|using\s+[\w.]+;|use\s+[\w:]+|require\(|const\s+\w+\s*=\s*require\(|\}\s*from\s+["'])/;
@@ -227,7 +295,7 @@ export function classify(f, cfg) {
   else if (matchAny(path, GENERATED) || a.slice(0, 5).some((l) => /@generated|DO NOT EDIT|auto-generated/i.test(l.s))) noise = "generated";
   else if (f.binary) noise = "binary";
   else if (f.status === "renamed" && a.length === 0 && r.length === 0) noise = "pure rename";
-  else if (a.length + r.length > 0 && normalizeFormat(a) === normalizeFormat(r)) noise = "formatting only";
+  else if (a.length + r.length > 0 && normalizeFormat(f, "new") === normalizeFormat(f, "old")) noise = "formatting only";
   else if (a.length + r.length > 0 && [...a, ...r].every((l) => l.s.trim() === "" || IMPORT_LINE.test(l.s))) noise = "imports only";
   const test = isTest(path, cfg);
   const kind = noise ? "noise" : test ? "test" : CODE_EXT.test(path) ? "source" : "other";
@@ -298,7 +366,7 @@ export const CONDITIONS = [
 ];
 
 export function prFacts(pr, files, cfg, now = Date.now()) {
-  for (const f of files) f.meta ??= classify(f, cfg);
+  if (files.some((f) => !f.meta)) classifyAll(files, cfg);
   const facts = computeFacts(files, cfg);
   const count = (k) => facts.filter((x) => x.kind === k).length;
   return {
