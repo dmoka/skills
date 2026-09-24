@@ -10,6 +10,7 @@
 //                 "claims": [{ "quote": "<verbatim from the PR text>", "file": "...", "line": 12, "note": "..." }],
 //                 "items":  [{ "severity": "high|medium|low", "file": "...", "line": 12, "side": "new|old",
 //                              "title": "...", "why": "..." }],
+//                 "explains": [{ "quote": "<verbatim author words>", "files": ["<path>", ...] }],
 //                 "fileNotes": { "<path>": "..." } }
 // Exit 1 with a list of every problem; nothing is written unless all notes pass.
 
@@ -64,6 +65,19 @@ if (report.kind === "triage") {
     checkText(`claims[${i}].note`, c.note, { max: 400 });
   }
   if (report.intent.status === "UNKNOWN" && (notes.claims ?? []).length) errors.push("claims: the PR states no intent, so there is nothing to quote — leave claims empty");
+
+  // Intent map: which of the author's words explain which files.
+  const needsReason = new Set(report.files.filter((f) => f.kind !== "noise").map((f) => f.path));
+  for (const [i, e] of (notes.explains ?? []).entries()) {
+    if (!e.quote) { errors.push(`explains[${i}]: missing "quote"`); continue; }
+    if (!intentText.includes(norm(e.quote))) errors.push(`explains[${i}]: "${e.quote.slice(0, 60)}" is not a verbatim quote from the author's text`);
+    if (!Array.isArray(e.files)) { errors.push(`explains[${i}]: "files" must be an array (empty = stated but not in this diff)`); continue; }
+    for (const p of e.files) {
+      if (!files.has(p)) errors.push(`explains[${i}]: "${p}" is not in this diff`);
+      else if (!needsReason.has(p)) errors.push(`explains[${i}]: "${p}" is noise — noise needs no explanation, leave it out`);
+    }
+  }
+  if (report.intent.status !== "UNKNOWN" && !(notes.explains ?? []).length) errors.push("explains: map the author's words to the files they explain — this is the intent map");
   for (const [i, it] of (notes.items ?? []).entries()) {
     if (!["high", "medium", "low"].includes(it.severity)) errors.push(`items[${i}]: severity must be high, medium or low`);
     if (!it.file) errors.push(`items[${i}]: every LOOK HERE item needs a "file"`);
@@ -85,6 +99,22 @@ if (report.kind === "triage") {
       ...(notes.items ?? []).map((it) => ({ source: "model", kind: "look-here", severity: it.severity, file: it.file, line: it.line, side: it.side ?? "new", text: it.title, why: it.why })),
     ];
     report.fileNotes = notes.fileNotes ?? {};
+    report.explains = (notes.explains ?? []).map((e) => ({ quote: e.quote, files: e.files }));
+    // Derived, not written by the model: a test counts as explained when the
+    // code it pairs with is explained.
+    const explained = new Set(report.explains.flatMap((e) => e.files));
+    const pairs = new Map();
+    for (const f of report.files) if (f.kind === "test") {
+      const src = report.files.find((c) => c.kind !== "test" && c.kind !== "noise" && stemOf(c.path) === stemOf(f.path));
+      if (src) pairs.set(f.path, src.path);
+    }
+    report.unexplained = [...needsReason].filter((p) => !explained.has(p) && !(pairs.has(p) && explained.has(pairs.get(p))));
+    report.unmatched = report.explains.filter((e) => !e.files.length).map((e) => e.quote);
+    const areaOf = new Map(report.files.map((f) => [f.path, f.areas]));
+    for (const p of report.unexplained) {
+      report.items.push({ source: "map", kind: "unexplained", severity: areaOf.get(p)?.length ? "high" : "medium", file: p, line: null,
+        text: report.intent.status === "UNKNOWN" ? "No stated intent covers this change — ask the author why it is here." : "Nothing the author wrote explains this change — ask why it is here." });
+    }
     const asFiles = report.files.map((f) => ({ path: f.path, meta: { kind: f.kind, noise: f.noise, stem: stemOf(f.path) } }));
     const cfg = report.config?.readingOrder ? { tour: { readingOrder: report.config.readingOrder } } : null;
     report.order = readingOrder(asFiles, report.items, cfg);

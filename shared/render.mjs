@@ -23,7 +23,9 @@ const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").
 const md = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
 const num = (n) => `<span class="num">${esc(n)}</span>`;
 const sevBadge = (s) => `<span class="sev sev-${esc(s)}">${esc(s)}</span>`;
-const srcBadge = (s) => (s === "fact" ? `<span class="tag tag-fact" title="Computed by a script from the diff">FACT</span>` : `<span class="tag tag-model" title="Written by the model; file and line checked by annotate.mjs">LOOK HERE</span>`);
+const srcBadge = (s) => (s === "fact" ? `<span class="tag tag-fact" title="Computed by a script from the diff">FACT</span>`
+  : s === "map" ? `<span class="tag tag-ask" title="No quote from the author explains this file">ASK WHY</span>`
+  : `<span class="tag tag-model" title="Written by the model; file and line checked by annotate.mjs">LOOK HERE</span>`);
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 const age = (d) => (d == null ? "—" : d === 0 ? "today" : `${d}d`);
 const when = (iso) => (iso ? new Date(iso).toISOString().replace("T", " ").slice(0, 16) + " UTC" : "");
@@ -128,6 +130,16 @@ td.r,th.r{text-align:right}
 .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:0.05em;border-radius:4px;height:17px;padding:0 5px}
 .tag-fact{color:var(--fg);background:var(--muted)}
 .tag-model{color:var(--blue);background:var(--blue-bg);border-color:oklch(0.74 0.11 250 / 0.3)}
+.tag-ask{color:var(--amber);background:var(--amber-bg);border-color:oklch(0.8 0.14 75 / 0.28)}
+.tag-src{color:var(--mfg);background:transparent}
+.imap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);border-top:1px solid var(--border)}
+.imap:first-of-type{border-top:0}
+.imap>div{padding:8px 0}.imap>div:first-child{padding-right:16px}
+.imap .files{display:flex;flex-wrap:wrap;gap:4px;align-content:flex-start}
+.fchip{font-family:var(--mono);font-size:11px;border:1px solid var(--border2);border-radius:4px;padding:1px 6px;color:var(--fg);background:var(--muted)}
+.fchip.warn{color:var(--amber);background:var(--amber-bg);border-color:oklch(0.8 0.14 75 / 0.28)}
+.fchip.bad{color:var(--red);background:var(--red-bg);border-color:oklch(0.704 0.191 22.2 / 0.3)}
+.imap-h{font-size:11px;color:var(--dim);margin:12px 0 2px}
 .chip{color:var(--mfg);font-family:var(--mono);font-size:10.5px;border-radius:4px}
 .chip .p{color:var(--fg)}.chip.neg .p{color:var(--green)}
 .pill{color:var(--mfg)}
@@ -162,7 +174,7 @@ td.r,th.r{text-align:right}
 .item .loc{font-family:var(--mono);font-size:11.5px;color:var(--mfg)}
 .item .why-t{color:var(--mfg);font-size:12px;margin-top:2px}
 .claim{padding:8px 0;border-top:1px solid var(--border)}.claim:first-child{border-top:0;padding-top:0}
-.claim q{font-style:normal;color:var(--fg)}.claim q:before{content:"\\201C"}.claim q:after{content:"\\201D"}
+.claim q,.imap q{font-style:normal;color:var(--fg)}.claim q:before,.imap q:before{content:"\\201C"}.claim q:after,.imap q:after{content:"\\201D"}
 .toc{counter-reset:s}
 .toc a{display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;gap:10px;padding:6px 12px;border-bottom:1px solid var(--border);align-items:center}
 .toc a:last-child{border-bottom:0}.toc a:hover{background:var(--faint);text-decoration:none}
@@ -289,13 +301,32 @@ function renderTour(r) {
   const idx = new Map(r.order.map((o, i) => [o.path, i]));
   const anchor = (path, line, side = "new") => `#f${idx.get(path)}${line != null ? (side === "old" ? "-o" : "-n") + line : ""}`;
   const loc = (path, line, side) => `<a class="mono" href="${anchor(path, line, side)}">${esc(path.split("/").pop())}${line != null ? ":" + line : ""}</a>`;
-  const items = [...r.items].sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.severity] - { high: 0, medium: 1, low: 2 }[b.severity]) || (a.source === "model" ? -1 : 1));
+  const SRC = { model: 0, map: 1, fact: 2 };
+  const items = [...r.items].sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.severity] - { high: 0, medium: 1, low: 2 }[b.severity]) || SRC[a.source] - SRC[b.source]);
   const pr = r.pr;
   const top = `<span class="mark"><i></i>PR Tour</span><span class="sep">/</span><span class="mono meta">${esc(r.repo ?? "local diff")}</span><span class="sep">/</span><span class="mono">#${esc(pr.number)}</span><span class="grow"></span><span class="meta hide-sm">${esc(when(r.generatedAt))}</span>`;
 
-  const intent = r.intent.status === "UNKNOWN"
-    ? `<div class="unknown">${sevBadge("high").replace(">high<", ">unknown<")}<p>No PR description and no linked issue. There is no stated intent to review against — ask the author before you read the code. The summary on the right is the model's reading of the diff, not the author's intent.</p></div>`
-    : r.intent.sources.map((s) => `<div class="src">${esc(s.source)}</div><div class="quote">${esc(s.text)}</div>`).join("<div style='height:10px'></div>");
+  const TYPE = { spec: "SPEC", description: "DESCRIPTION", issue: "ISSUE", commits: "COMMITS", title: "TITLE" };
+  const srcBlock = (x) => {
+    const long = x.text.split("\n").length > 10 || x.text.length > 700;
+    const head = `<div class="src"><span class="tag tag-src">${TYPE[x.type] ?? esc(x.type)}</span> ${esc(x.source)}</div>`;
+    return long ? `<details class="more" style="margin:0 -12px"><summary>${head.replace('class="src"', 'class="src" style="display:inline-block;margin:0 0 0 12px"')} <span class="caret">▸</span></summary><div class="quote" style="margin:0 12px 6px">${esc(x.text)}</div></details>`
+      : `${head}<div class="quote">${esc(x.text)}</div>`;
+  };
+  const intent = (r.intent.status === "UNKNOWN"
+    ? `<div class="unknown" style="margin-bottom:10px">${sevBadge("high").replace(">high<", ">unknown<")}<p>No spec, no description, no linked issue, and no title or commit that says what this is for. There is nothing to review against — ask the author first. The summary on the right is the model's reading of the diff, not the author's intent.</p></div>`
+    : r.intent.status === "title only"
+      ? `<div class="unknown" style="margin-bottom:10px">${sevBadge("medium").replace(">medium<", ">title only<")}<p>The title is all the author wrote. Everything the title does not explain is listed under <b>Intent map</b>.</p></div>` : "")
+    + r.intent.sources.map(srcBlock).join("<div style='height:10px'></div>");
+
+  const chip = (p, cls = "") => `<a class="fchip ${cls}" href="#f${idx.get(p)}">${esc(p.split("/").pop())}</a>`;
+  const areaOf = new Map(r.files.map((f) => [f.path, f.areas]));
+  const imap = !r.whatItDoes ? `<div class="empty">Not annotated yet.</div>`
+    : [
+      ...(r.explains ?? []).filter((e) => e.files.length).map((e) => `<div class="imap"><div><q>${esc(e.quote)}</q></div><div class="files">${e.files.map((p) => chip(p)).join("")}</div></div>`),
+      (r.unexplained ?? []).length ? `<div class="imap-h">Not explained by anything the author wrote — ask why</div><div class="imap"><div style="color:var(--mfg)">${plural(r.unexplained.length, "file")} with no stated reason</div><div class="files">${r.unexplained.map((p) => chip(p, areaOf.get(p)?.length ? "bad" : "warn")).join("")}</div></div>` : `<div class="imap-h">Every changed file is explained by the author's words.</div>`,
+      (r.unmatched ?? []).length ? `<div class="imap-h">Stated, but not visible in this diff</div>${r.unmatched.map((q) => `<div class="imap"><div><q>${esc(q)}</q></div><div class="files"><span class="empty">no matching change</span></div></div>`).join("")}` : "",
+    ].join("");
 
   const claims = r.claims.length
     ? r.claims.map((c) => `<div class="claim"><q>${esc(c.quote)}</q>${c.file ? ` <span class="sep">→</span> check at ${loc(c.file, c.line, c.side)}` : ""}${c.note ? `<div class="note">${md(c.note)}</div>` : ""}</div>`).join("")
@@ -332,14 +363,15 @@ ${noise.map((o) => { const f = files.get(o.path); return `<details class="row" i
   <div><div class="k">Collapsed noise</div><div class="v">${noiseLines.toLocaleString("en")}<small>lines in ${plural(noise.length, "file")}</small></div></div>
   <div><div class="k">High</div><div class="v" style="color:${counts.high ? "var(--red)" : "inherit"}">${counts.high}</div></div>
   <div><div class="k">Medium</div><div class="v" style="color:${counts.medium ? "var(--amber)" : "inherit"}">${counts.medium}</div></div>
-  <div><div class="k">Intent</div><div class="v" style="font-size:14px;margin-top:5px">${r.intent.status === "UNKNOWN" ? `<span style="color:var(--red)">UNKNOWN</span>` : "stated"}</div></div>
+  <div><div class="k">Intent</div><div class="v" style="font-size:14px;margin-top:5px">${r.intent.status === "UNKNOWN" ? `<span style="color:var(--red)">UNKNOWN</span>` : r.intent.status === "title only" ? `<span style="color:var(--amber)">title only</span>` : esc(r.intent.status)}<small>${(r.unexplained ?? []).length ? `${r.unexplained.length} unexplained` : ""}</small></div></div>
 </div>
 <h2>Why</h2>
 <div class="box why">
   <section><h3>Intent <span class="count" style="text-transform:none;letter-spacing:0;color:var(--dim)">the author's words</span></h3>${intent}</section>
   <section><h3>What the diff does <span class="tag tag-model">MODEL</span></h3>${r.whatItDoes ? `<div class="model">${md(r.whatItDoes)}</div>` : `<div class="empty">Not annotated yet.</div>`}</section>
+  <section class="full"><h3>Intent map <span class="count" style="text-transform:none;letter-spacing:0;color:var(--dim)">the author's words → the files they explain · MODEL mapping, quotes and files checked</span></h3>${imap}</section>
   <section class="full"><h3>Claims to check</h3>${claims}</section>
-  <section class="full"><h3>Where to look <span class="count" style="text-transform:none;letter-spacing:0;color:var(--dim)">${items.length} items · FACT = computed from the diff · LOOK HERE = model, line-checked</span></h3><div class="items">${itemRows}</div></section>
+  <section class="full"><h3>Where to look <span class="count" style="text-transform:none;letter-spacing:0;color:var(--dim)">${items.length} items · FACT = computed from the diff · LOOK HERE = model, line-checked · ASK WHY = no stated reason</span></h3><div class="items">${itemRows}</div></section>
 </div>
 <h2>Reading order <span class="count">${esc(r.orderRule)}</span></h2>
 <div class="box toc">${toc}</div>

@@ -53,6 +53,9 @@ Replace every path with this repo's real ones. The points are a proposal.
   },
 
   "tour": {
+    // Optional. Folders searched for a spec or review contract whose file
+    // name contains the branch name (feat/event-waitlist -> *event-waitlist*.md).
+    "specDirs": ["docs", "specs", ".scratch", "contracts"],
     // Optional. The order THIS team reads in; first match wins.
     // Omit to use the built-in order below.
     "readingOrder": [
@@ -115,10 +118,14 @@ with `matchedPRs`), `scoring`, `summary` (model), and `prs[]`: `rank`,
 (`id`, `points`, `why`, `evidence`), `facts[]` (high-severity facts), and
 `explanation` (model).
 
-**tour-<n>.json** — `pr` (metadata), `intent` (`status`: `stated` |
-`UNKNOWN`, `sources[]` with the author's text), `whatItDoes` (model),
+**tour-<n>.json** — `pr` (metadata), `intent` (`status`: `spec` |
+`described` | `title only` | `UNKNOWN`, `sources[]` of `{ type: spec |
+description | issue | commits | title, source, text }`, strongest first),
+`explains[]` (model: `quote`, `files`), `unexplained[]` (derived: non-noise
+files no quote explains; a test inherits its code's explanation),
+`unmatched[]` (derived: quotes with no file), `whatItDoes` (model),
 `claims[]` (`quote`, `file`, `line`, `note`), `items[]` (`source`: `fact` |
-`model`, `kind`, `severity`, `file`, `line`, `side`, `text`, `why`),
+`model` | `map`, `kind`, `severity`, `file`, `line`, `side`, `text`, `why`),
 `fileNotes`, `order[]` (`path`, `role`: `code` | `test` | `noise`,
 `pairedWith`, `why`), `orderRule`, and `files[]` (`path`, `oldPath`, `status`,
 `kind`, `noise`, `areas`, `additions`, `deletions`, `hunks[]` with `lines[]`

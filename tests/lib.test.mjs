@@ -119,3 +119,17 @@ test("formatting only: a closing line aligned as context on one side", () => {
   const [g] = files(diff("app/u.tsx", "@@ -1,2 +1,3 @@\n-const a = f('x', b)\n+const a = f(\n+  \"x\", b,\n+)\n ;\n"));
   assert.equal(g.meta.noise, "formatting only");
 });
+
+test("intent: informative titles, issue refs, status by strongest source", async () => {
+  const { isInformative, issueRefs, intentStatus, branchSlug } = await import("../shared/lib.mjs");
+  assert.equal(isInformative("wip"), false);
+  assert.equal(isInformative("fix: update"), false);
+  assert.equal(isInformative("wip: invoice PDF"), true);
+  assert.equal(isInformative("Speed up booking tests"), true);
+  assert.deepEqual(issueRefs("Closes #12, see #7 and v2#x"), [12, 7]);
+  assert.equal(branchSlug("feat/event-waitlist"), "event-waitlist");
+  assert.equal(intentStatus([{ type: "title", text: "wip" }]), "UNKNOWN");
+  assert.equal(intentStatus([{ type: "title", text: "Speed up booking tests" }]), "title only");
+  assert.equal(intentStatus([{ type: "commits", text: "x" }, { type: "title", text: "wip" }]), "described");
+  assert.equal(intentStatus([{ type: "spec", text: "x" }]), "spec");
+});

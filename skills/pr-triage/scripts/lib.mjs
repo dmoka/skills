@@ -466,3 +466,31 @@ export function readingOrder(files, items, cfg) {
   for (const n of noise.sort((a, b) => a.path.localeCompare(b.path))) out.push({ path: n.path, role: "noise", why: n.meta.noise });
   return out;
 }
+
+// ---------- intent (pr-tour) ----------
+// Intent is only ever the author's own words. Sources, strongest first:
+// a spec or review contract, the PR description and linked issues, commit
+// messages, the title. The model may quote them; it may never add to them.
+
+export const INTENT_RANK = { spec: 4, description: 3, issue: 3, commits: 2, title: 1 };
+
+// "wip", "fix", "chore: update" say nothing. Two real words after the
+// conventional-commit prefix are the minimum for a title to count.
+const WEAK = new Set(["wip", "fix", "fixes", "fixed", "update", "updates", "updated", "change", "changes", "misc", "tmp", "stuff", "minor", "cleanup", "tweak", "tweaks", "test", "tests", "pr", "draft"]);
+export function isInformative(text) {
+  const words = String(text ?? "").replace(/^\s*[a-z]+(\([^)]*\))?!?:\s*/i, "").split(/[^A-Za-z0-9]+/).filter((w) => w && !WEAK.has(w.toLowerCase()));
+  return words.length >= 2;
+}
+
+// "Closes #12", "fixes #7", a bare "#31" in a commit message.
+export function issueRefs(text) {
+  return [...new Set([...String(text ?? "").matchAll(/(?:^|[\s(])#(\d+)\b/g)].map((m) => +m[1]))];
+}
+
+// "feat/event-waitlist" -> "event-waitlist"
+export const branchSlug = (branch) => String(branch ?? "").split("/").pop().toLowerCase();
+
+export function intentStatus(sources) {
+  const best = Math.max(0, ...sources.filter((s) => s.type !== "title" || isInformative(s.text)).map((s) => INTENT_RANK[s.type] ?? 0));
+  return best >= 4 ? "spec" : best >= 2 ? "described" : best === 1 ? "title only" : "UNKNOWN";
+}
