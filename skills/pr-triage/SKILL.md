@@ -34,7 +34,7 @@ never through a summarizing fetch tool.
 4. **Explain.** Read `triage.json`. Write `.pr-review/triage.notes.json`:
    `{ "summary": "...", "prs": { "<number>": "one sentence" } }`. Each sentence
    says why this PR sits where it sits, in reviewer language, from its
-   matched rules and facts: "Changes refund rounding and adds no test — the
+   matched rules and facts: "Changes tax rounding and adds no test — the
    money rule and the untested rule fired." Where a rule scores a PR in a way
    the facts contradict (a 900-line PR that is all renames), say so — that is
    a rule worth changing.

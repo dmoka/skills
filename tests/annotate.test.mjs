@@ -29,8 +29,8 @@ function annotate(report, notes) {
   try { execFileSync("node", ["skills/pr-tour/scripts/annotate.mjs", report, n], { encoding: "utf8", stdio: "pipe" }); return { ok: true }; }
   catch (e) { return { ok: false, err: e.stderr }; }
 }
-const good = { whatItDoes: "Subtracts the fee twice.", explains: [{ quote: "Rounds partial refunds.", files: ["src/domain/refund.ts"] }], claims: [{ quote: "No behaviour change for full refunds.", file: "src/domain/refund.ts", line: 11 }],
-  items: [{ severity: "high", file: "src/domain/refund.ts", line: 11, title: "Fee subtracted twice", why: "Contradicts the claim." }] };
+const good = { whatItDoes: "Subtracts the fee twice.", explains: [{ quote: "Rounds partial refunds.", files: ["src/domain/refund.ts"] }], claims: [{ quote: "No behaviour change for full refunds.", file: "src/domain/refund.ts", line: 11, code: "fee - fee" }],
+  items: [{ severity: "high", file: "src/domain/refund.ts", line: 11, code: "total - fee - fee", title: "Fee subtracted twice", why: "Contradicts the claim." }] };
 
 test("accepts line-checked notes and reorders", () => {
   const r = tour();
@@ -114,5 +114,18 @@ test("intent map: a test inherits its code's explanation; noise and unknown file
   assert.deepEqual(out.unmatched, ["booking seat cap"]);
   assert.match(annotate(r, { whatItDoes: "x", explains: [{ quote: "Raise the booking seat cap", files: ["package-lock.json"] }] }).err, /is noise/);
   assert.match(annotate(r, { whatItDoes: "x", explains: [{ quote: "Raise the booking seat cap", files: ["src/nope.ts"] }] }).err, /not in this diff/);
-  assert.match(annotate(r, { whatItDoes: "x" }).err, /intent map/);
+  assert.match(annotate(r, { whatItDoes: "x" }).err, /so map it/);
+});
+
+test("the code fragment catches an off-by-one line", () => {
+  const res = annotate(tour(), { ...good, items: [{ ...good.items[0], line: 10 }] });
+  assert.match(res.err, /:10 does not contain "total - fee - fee" — that line is: const fee = order.feeCents;/);
+  assert.match(annotate(tour(), { ...good, items: [{ ...good.items[0], code: undefined }] }).err, /add "code"/);
+});
+
+test("quotes are case-sensitive and at least 4 chars; at most 8 items; soft verdicts refused", () => {
+  assert.match(annotate(tour(), { ...good, explains: [{ quote: "rounds partial refunds.", files: [] }] }).err, /not a verbatim quote/);
+  assert.match(annotate(tour(), { ...good, explains: [{ quote: "R", files: [] }] }).err, /not a verbatim quote/);
+  assert.match(annotate(tour(), { ...good, items: Array(9).fill(good.items[0]) }).err, /max 8/);
+  assert.match(annotate(tour(), { ...good, whatItDoes: "This change looks safe." }).err, /never gives a verdict/);
 });

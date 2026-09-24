@@ -33,7 +33,8 @@ if (args["diff-file"] || args.git) {
       .map((c) => { const [subject, body = ""] = c.split("\x1f"); return { subject: subject.trim(), body: body.trim() }; });
   }
   pr = {
-    number: args.number ?? "local",
+    // Local runs are named after the branch, so two branches never overwrite each other.
+    number: args.number ?? (branchSlug(range ? range.split(/\.{2,3}/)[1] : args.branch) || "local"),
     title: args.title ?? "",
     body: args["body-file"] ? readFileSync(args["body-file"], "utf8") : "",
     author: null, url: null, baseRefName: range ? range.split(/\.{2,3}/)[0] : null, headRefName: range ? range.split(/\.{2,3}/)[1] : args.branch ?? null,
@@ -128,7 +129,7 @@ const out = {
   items: facts,     // FACT items now; LOOK HERE items get appended by annotate.mjs
   fileNotes: {},
   order,
-  orderRule: "hotspots (any high-severity item) first, then by layer; each test right after the code it tests; tests with no changed source next; noise collapsed last",
+  orderRule: "hotspots (any high-severity item) first, then by layer (alphabetical within a layer); each test right after the code it tests; tests with no changed source next; noise collapsed last",
   files: files.map((f) => ({
     path: f.path, oldPath: f.oldPath, status: f.status, similarity: f.similarity, binary: f.binary,
     additions: f.additions, deletions: f.deletions,
@@ -141,5 +142,7 @@ mkdirSync(outDir, { recursive: true });
 const file = join(outDir, `tour-${pr.number}.json`);
 writeFileSync(file, JSON.stringify(out, null, 2) + "\n");
 console.log(file);
+const noiseLines = files.filter((f) => f.meta.noise).reduce((n, f) => n + f.additions + f.deletions, 0);
+console.log(`noise: ${noiseLines} lines in ${files.filter((f) => f.meta.noise).length} files, collapsed`);
 console.log(`intent: ${out.intent.status} (${intentSources.map((x) => x.type).join(", ") || "none"}) · ${files.length} files (${files.filter((f) => f.meta.noise).length} noise) · ${facts.length} facts (${facts.filter((f) => f.severity === "high").length} high)`);
 for (const f of facts.filter((x) => x.severity !== "low")) console.log(`  ${f.severity.padEnd(6)} ${f.file}${f.line ? ":" + f.line : ""}  ${f.text}`);

@@ -25,56 +25,47 @@ Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
 0. **Start clean.** Run the tour in a fresh session, never in the one that
    wrote the diff. An author cannot point at its own blind spots.
 1. **Compute.** `node scripts/tour.mjs <pr-number>` (add `--repo owner/name`
-   outside the repo; `--git main...feat/x` before a PR exists). Pass
-   `--spec <path>` when the spec or review contract lives elsewhere. It writes
-   `.pr-review/tour-<n>.json`: FACT items, per-file classification, a reading
-   order, and the author's words from every source it finds, strongest first:
-   a spec (a markdown file in `docs/`, `specs/`, `.scratch/` or `contracts/`
-   whose name contains the branch name), the PR description, linked issues
-   and `#123` refs in commits, the commit messages, the title. Intent status
-   is `spec`, `described`, `title only`, or `UNKNOWN`. An empty diff stops
-   here with an error. `.github/pr-review.jsonc` is read if present.
-2. **Read** the JSON, then every non-noise file's diff in the given order.
-   Open surrounding source when a hunk is not enough to understand it.
-3. **Write the WHY** to `.pr-review/tour-<n>.notes.json`:
-   - `whatItDoes` — two or three sentences on what the diff actually does.
-     It is shown as the model's reading, never as the author's intent.
-   - `explains` — **the intent map.** Split the author's words into the
-     things they say the PR does, each **quoted verbatim**, and list the
-     non-noise files that implement each one:
-     `{ "quote": "Speed up booking tests", "files": ["vitest.config.ts"] }`.
-     Map a file only when the quote explains *its change*, not just its
-     folder. A quote with no matching change gets `"files": []`. Leave a
-     file out when nothing the author wrote explains it — the gate lists it
-     as ASK WHY, and that list is the most useful thing the tour shows.
-     A test inherits the explanation of the code it tests.
-   - `claims` — contract claims the author makes, **quoted verbatim** from
-     the author's text ("no behaviour change for full refunds"), each pointed at
-     the `file` and `line` where a reviewer can check it, with a `note` on
-     what to check. No stated intent → no claims; the tour shows intent
-     UNKNOWN and tells the reviewer to ask the author.
-   - `items` — at most eight LOOK HERE pointers: `severity`, `file`, `line`
-     (`side: "old"` for a removed line), a short `title`, and `why`. Look for
-     a claim the code contradicts, a risky decision nobody mentioned, a
-     missing security decision (a new input with no validation, a new action
-     with no authorization check, a secret reaching a log), an edge case the
-     tests skip. **high** = can change money, permissions or stored data, or
-     contradicts a stated claim; **medium** = a behaviour change worth a
-     test; **low** = worth a glance. Phrase each as what to check, not as a
-     conclusion. Skip anything the typecheck, linter or CI already catches;
-     the list is for what only a reader can judge.
+   outside the repo; `--git main...feat/x` before a PR exists; `--spec
+   <path>` when the spec or review contract lives elsewhere; `--out <dir>` to
+   change the output folder). It writes `.pr-review/tour-<n>.json` — `<n>` is
+   the PR number, or the branch name in `--git` mode — with FACT items,
+   per-file classification, a reading order, and the author's words from
+   every source it finds, strongest first: a spec (a markdown file in
+   `docs/`, `specs/`, `.scratch/` or `contracts/` whose name contains the
+   branch name), the PR description, linked issues and `#123` refs in
+   commits, the commit messages, the title. Intent status is `spec`,
+   `described`, `title only`, or `UNKNOWN`. It prints the noise line count.
+   An empty diff stops here with an error.
+2. **Read** the diff in the reading order (`gh pr diff <n>` or `git diff`),
+   noise included — skim it, it is collapsed for humans, not for you. Open
+   surrounding source when a hunk is not enough.
+3. **Write the WHY** to `.pr-review/tour-<n>.notes.json`. The full format,
+   a worked example, and the severity rubric are in
+   [references/notes.md](references/notes.md). In short:
+   - `whatItDoes` — two or three sentences on what the diff actually does,
+     shown as the model's reading, never as the author's intent.
+   - `explains` — **the intent map**: each thing the author says the PR
+     does, quoted verbatim, with the code files that implement it. Leave out
+     a file nothing explains — the gate lists it as ASK WHY, and that list is
+     the most useful thing the tour shows.
+   - `claims` — checkable promises the author makes ("no change to
+     guest checkout"), quoted verbatim, each pointed at the line to check.
+   - `items` — at most eight LOOK HERE pointers, each with `severity`,
+     `file`, `line`, a verbatim `code` fragment of that line, `title`, `why`.
+     Phrase each as what to check, never as a conclusion. Skip what CI
+     already catches.
    - `fileNotes` — one line per non-noise file: what to look at in it.
-4. **Gate.** `node scripts/annotate.mjs .pr-review/tour-<n>.json
-   .pr-review/tour-<n>.notes.json`. It rejects a quote that is not in the
-   author's text, a file or line that is not in the diff, a noise file in the
-   intent map, and any verdict word. It then derives the unexplained files
+4. **Gate.** `node scripts/annotate.mjs <tour.json> <notes.json>`. It
+   rejects a quote that is not verbatim in the author's text, a pointer whose
+   line does not contain its `code`, a noise file in the intent map, more
+   than eight items, and verdict words. It then derives the unexplained files
    and the unmatched quotes, and recomputes the reading order. Fix the notes,
-   never the check.
-5. **Render.** `node scripts/render.mjs .pr-review/tour-<n>.json` writes
-   `tour-<n>.html`: one file, no server, safe to publish as a CI artifact.
+   never the check; rerunning is safe.
+5. **Render.** `node scripts/render.mjs <tour.json>` writes the `.html` next
+   to it: one file, no server, safe to publish as a CI artifact. Open it and
+   look at the WHY panel before you report.
 6. **Report** in chat: the HTML path, the intent status, the unexplained
-   files, the high items with `file:line`, and how many lines sit in
-   collapsed noise.
+   files, the high items with `file:line`, and the noise line count.
 
 ## Hard rules
 
