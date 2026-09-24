@@ -205,6 +205,12 @@ export function stemOf(path) {
     .toLowerCase();
 }
 
+// A test pairs with a source file when the names match, or when the test's
+// name starts with the source's: "orders-service.test.ts" tests "orders.ts".
+export function testsSource(testStem, srcStem) {
+  return testStem === srcStem || testStem.startsWith(srcStem + "-") || testStem.startsWith(srcStem + "_");
+}
+
 export function areasOf(path, cfg) {
   return Object.entries(cfg?.areas ?? {}).filter(([, globs]) => matchAny(path, globs)).map(([name]) => name);
 }
@@ -316,7 +322,7 @@ export function computeFacts(files, cfg) {
   const facts = [];
   const push = (kind, severity, file, line, text) => facts.push({ source: "fact", kind, severity, file, line, text });
   const changedTests = files.filter((f) => f.meta.kind === "test" || (f.meta.test && f.meta.noise));
-  const testStems = new Set(changedTests.map((f) => f.meta.stem));
+  const testStems = changedTests.map((f) => f.meta.stem);
 
   for (const f of files) {
     const m = f.meta;
@@ -326,7 +332,11 @@ export function computeFacts(files, cfg) {
       for (const l of a) if (SKIP.test(l.s)) push("skip-added", "high", f.path, l.n, `Adds a skipped test: \`${l.s.trim().slice(0, 100)}\``);
       for (const l of a) if (FOCUS.test(l.s)) push("focus-added", "high", f.path, l.n, `Adds a focused test (\`.only\`) — the rest of the file stops running: \`${l.s.trim().slice(0, 100)}\``);
       const net = r.filter((l) => ASSERT.test(l.s)).length - a.filter((l) => ASSERT.test(l.s)).length;
-      if (net > 0) push("assertions-removed", "medium", f.path, firstLine(f), `Removes ${net} more assertion${net > 1 ? "s" : ""} than it adds.`);
+      if (net > 0) {
+        const gone = r.find((l) => ASSERT.test(l.s));
+        facts.push({ source: "fact", kind: "assertions-removed", severity: "medium", file: f.path, line: gone.o, side: "old",
+          text: `Removes ${net} more assertion${net > 1 ? "s" : ""} than it adds: \`${gone.s.trim().slice(0, 90)}\`` });
+      }
       if (f.status === "deleted") push("test-deleted", "high", f.path, null, "Deletes a test file.");
     }
     if (/\.sql$/i.test(f.path) || matchAny(f.path, cfg?.areas?.migrations ?? [])) {
@@ -341,13 +351,14 @@ export function computeFacts(files, cfg) {
         else if (before.get(d[1]) !== d[2]) push("dependency-changed", "low", f.path, l.n, `Changes \`${d[1]}\` ${before.get(d[1])} → ${d[2]}.`);
       }
     }
-    if (m.kind === "source" && !testStems.has(m.stem) && !/\.config\.[^.]+$/.test(f.path)) {
+    if (m.kind === "source" && !testStems.some((t) => testsSource(t, m.stem)) && !/\.config\.[^.]+$/.test(f.path)) {
       // Low on its own: most changes to glue code carry no test. Medium where you said it matters.
       push("untested-change", m.areas.length ? "medium" : "low", f.path, null, `Source changed (+${f.additions} −${f.deletions}); no changed test shares its name.`);
     }
     for (const area of m.areas) {
-      if (area === "migrations" && /\.sql$/i.test(f.path)) push("area", "medium", f.path, null, "Touches area **migrations**.");
-      else if (area !== "migrations" && !m.noise) push("area", "medium", f.path, null, `Touches area **${area}**.`);
+      // Context, not a finding: the area also shows as a tag on the file.
+      if (area === "migrations" && /\.sql$/i.test(f.path)) push("area", "low", f.path, null, "Touches area **migrations**.");
+      else if (area !== "migrations" && !m.noise) push("area", "low", f.path, null, `Touches area **${area}**.`);
     }
   }
   return facts;
@@ -412,7 +423,16 @@ export function evalRule(rule, f, cfg) {
       case "labels": ok = c.some((l) => f.labels.includes(l)); break;
       case "author": ok = (Array.isArray(c) ? c : [c]).includes(f.author); break;
       case "addedLinesMatch": ok = new RegExp(c, "im").test(f.addedText); break;
-      default: ok = compare(f[k], c); if (ok && typeof f[k] === "number") ev.push(`${k} ${f[k]}`);
+      default: {
+        ok = compare(f[k], c);
+        if (!ok) break;
+        // Name the files behind a fact-based condition, so the rank can be checked.
+        const kinds = { srcWithoutTests: ["untested-change"], skippedTestsAdded: ["skip-added", "focus-added"], destructiveSql: ["destructive-sql"], assertionsRemoved: ["assertions-removed"] }[k];
+        if (kinds && f.facts) {
+          const where = f.facts.filter((x) => kinds.includes(x.kind)).map((x) => `${x.file}${x.line ? ":" + x.line : ""}`);
+          ev.push(...where.slice(0, 4), ...(where.length > 4 ? [`+${where.length - 4} more`] : []));
+        } else if (typeof f[k] === "number") ev.push(`${k} ${f[k]}`);
+      }
     }
     if (!ok) return null;
   }
@@ -443,7 +463,8 @@ export function readingOrder(files, items, cfg) {
   const noise = files.filter((f) => f.meta.kind === "noise");
   const pairOf = new Map();
   for (const t of tests) {
-    const src = code.find((c) => c.meta.stem === t.meta.stem);
+    // Prefer an exact name match, then the longest source name the test starts with.
+    const src = code.filter((c) => testsSource(t.meta.stem, c.meta.stem)).sort((a, b) => b.meta.stem.length - a.meta.stem.length)[0];
     if (src) pairOf.set(t.path, src.path);
   }
   const groupSev = (c) => Math.max(maxSev(c.path), ...tests.filter((t) => pairOf.get(t.path) === c.path).map((t) => maxSev(t.path)));

@@ -15,7 +15,7 @@
 // Exit 1 with a list of every problem; nothing is written unless all notes pass.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { readingOrder, stemOf } from "./lib.mjs";
+import { readingOrder, stemOf, testsSource } from "./lib.mjs";
 
 const [reportPath, notesPath] = process.argv.slice(2);
 if (!reportPath || !notesPath) { console.error("usage: annotate.mjs <report.json> <notes.json>"); process.exit(1); }
@@ -24,7 +24,7 @@ const notes = JSON.parse(readFileSync(notesPath, "utf8"));
 const errors = [];
 
 // What these reports must never say. They point attention; they do not judge.
-const VERDICT = /\b(LGTM|looks good|looks (?:safe|fine|correct|harmless)|(?:is|are|seems|seem) (?:safe|fine|harmless)|safe to merge|ready to merge|approve[ds]?|good to go|ship it|no issues|nothing to worry|exploitable|is secure|verified safe)\b/i;
+const VERDICT = /\b(LGTM|nothing to review|no need to review|safe to ignore|looks good|looks (?:safe|fine|correct|harmless)|(?:is|are|seems|seem) (?:safe|fine|harmless)|safe to merge|ready to merge|approve[ds]?|good to go|ship it|no issues|nothing to worry|exploitable|is secure|verified safe)\b/i;
 function checkText(where, text, { required = false, max = 600 } = {}) {
   if (text == null || text === "") { if (required) errors.push(`${where}: missing`); return; }
   if (typeof text !== "string") { errors.push(`${where}: must be a string`); return; }
@@ -83,10 +83,9 @@ if (report.kind === "triage") {
     if (!Array.isArray(e.files)) { errors.push(`explains[${i}]: "files" must be an array (empty = stated but not in this diff)`); continue; }
     for (const p of e.files) {
       if (!files.has(p)) errors.push(`explains[${i}]: "${p}" is not in this diff`);
-      else if (!needsReason.has(p)) errors.push(`explains[${i}]: "${p}" is noise — noise needs no explanation, leave it out`);
     }
   }
-  if (report.intent.status !== "UNKNOWN" && !(notes.explains ?? []).length) errors.push('explains: the author stated an intent, so map it — one entry per thing they say the PR does; use "files": [] for a quote with no matching change');
+  if (report.intent.status !== "UNKNOWN" && needsReason.size && !(notes.explains ?? []).length) errors.push('explains: the author stated an intent, so map it — one entry per thing they say the PR does; use "files": [] for a quote with no matching change');
   if ((notes.items ?? []).length > 8) errors.push(`items: ${notes.items.length} LOOK HERE items, max 8 — keep the ones a reader must not miss`);
   for (const [i, it] of (notes.items ?? []).entries()) {
     if (!["high", "medium", "low"].includes(it.severity)) errors.push(`items[${i}]: severity must be high, medium or low`);
@@ -115,13 +114,14 @@ if (report.kind === "triage") {
     const explained = new Set(report.explains.flatMap((e) => e.files));
     const pairs = new Map();
     for (const f of report.files) if (f.kind === "test") {
-      const src = report.files.find((c) => c.kind !== "test" && c.kind !== "noise" && stemOf(c.path) === stemOf(f.path));
+      const src = report.files.filter((c) => c.kind !== "test" && c.kind !== "noise" && testsSource(stemOf(f.path), stemOf(c.path)))
+        .sort((a, b) => stemOf(b.path).length - stemOf(a.path).length)[0];
       if (src) pairs.set(f.path, src.path);
     }
     report.unexplained = [...needsReason].filter((p) => !explained.has(p) && !(pairs.has(p) && explained.has(pairs.get(p))));
     report.unmatched = report.explains.filter((e) => !e.files.length).map((e) => e.quote);
     const areaOf = new Map(report.files.map((f) => [f.path, f.areas]));
-    for (const p of report.unexplained) {
+    for (const p of report.unexplained.filter((x) => !(pairs.has(x) && report.unexplained.includes(pairs.get(x))))) {
       report.items.push({ source: "map", kind: "unexplained", severity: areaOf.get(p)?.length ? "high" : "medium", file: p, line: null,
         text: report.intent.status === "UNKNOWN" ? "No stated intent covers this change — ask the author why it is here." : "Nothing the author wrote explains this change — ask why it is here." });
     }

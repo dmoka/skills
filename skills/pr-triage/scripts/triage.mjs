@@ -60,6 +60,7 @@ for (const pr of prs) {
     filesChanged: facts.filesChanged,
     noiseFiles: facts.noiseFiles,
     areas: facts.areas,
+    files: files.map((f) => ({ path: f.path, kind: f.meta.kind, noise: f.meta.noise, areas: f.meta.areas, additions: f.additions, deletions: f.deletions })),
     score: matched.reduce((s, m) => s + m.points, 0),
     matched,
     facts: facts.facts.filter((f) => f.severity === "high").slice(0, 5),

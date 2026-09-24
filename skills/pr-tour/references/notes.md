@@ -56,20 +56,39 @@ description, issue, commit, spec.
 
 - Title "Gift cards: issue, redeem at checkout, expire after a year" → four
   entries: the part before the colon, and each listed action.
+- Quotes may span a line break in the source; whitespace is normalised.
+- Use the most specific words. When the description says it better than the
+  title, map the description and let the title map to nothing — an unmatched
+  title is fine.
 - List **code files only**. A test inherits the explanation of the code it
   tests; list a test only when it has no changed code file to pair with.
-- Map a file only when the quote explains *its change*, not its folder.
+  Noise never needs a reason; you may map it, and it never shows as ASK WHY.
+- Map a file only when the quote explains **all of its change**. When a file
+  does the stated thing *and* something unstated (a migration that adds the
+  described column and drops another), leave it out so it shows as ASK WHY,
+  and point an item at the unstated part.
+- A PR whose every file is noise needs no intent map.
 - A quote with no matching change: `"files": []`.
 - A file nothing explains: leave it out. The gate lists it as ASK WHY.
 
 ## Claims
 
-A claim is a **checkable promise**: "no behaviour change for X", "idempotent",
-"only formatting", "backwards compatible", "no new dependencies". Descriptive
-text ("adds gift cards") is intent-map material, not a claim — do not repeat
-it here. Point each claim at the line where a reader can test it.
+A claim is a **checkable promise** — a sentence that could turn out false:
+"no behaviour change for X", "idempotent", "only formatting", "seats stay
+sold", "the UI comes in a follow-up", "no new dependencies". Descriptive text
+("adds gift cards") is intent-map material, not a claim. Point each claim at
+the line where a reader can test it (`side: "old"` works here too); a claim
+with no single line gets no `file`. No claims is a valid answer. When the
+code contradicts a claim, also add a high item at that line.
 
-## Items (LOOK HERE), at most 8
+## Items (LOOK HERE), at most 8 of yours
+
+The eight counts only your items; FACT and ASK WHY items come on top. Do not
+restate a FACT. To add what a FACT cannot know — the consequence — point
+your item at where the consequence lands (the caller that loses the dropped
+column), or at the same line with the connection in `why` ("the skipped test
+is the one this change breaks").
+
 
 | Severity | Use for |
 |---|---|

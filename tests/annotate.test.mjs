@@ -112,7 +112,8 @@ test("intent map: a test inherits its code's explanation; noise and unknown file
   const out = JSON.parse(readFileSync(r, "utf8"));
   assert.deepEqual(out.unexplained, []);
   assert.deepEqual(out.unmatched, ["booking seat cap"]);
-  assert.match(annotate(r, { whatItDoes: "x", explains: [{ quote: "Raise the booking seat cap", files: ["package-lock.json"] }] }).err, /is noise/);
+  // Noise may be mapped (it never needs to be), and does not make a quote "unmatched".
+  assert.equal(annotate(r, { whatItDoes: "x", explains: [{ quote: "Raise the booking seat cap", files: ["src/domain/booking.ts", "vitest.config.ts", "package-lock.json"] }] }).ok, true);
   assert.match(annotate(r, { whatItDoes: "x", explains: [{ quote: "Raise the booking seat cap", files: ["src/nope.ts"] }] }).err, /not in this diff/);
   assert.match(annotate(r, { whatItDoes: "x" }).err, /so map it/);
 });
@@ -128,4 +129,19 @@ test("quotes are case-sensitive and at least 4 chars; at most 8 items; soft verd
   assert.match(annotate(tour(), { ...good, explains: [{ quote: "R", files: [] }] }).err, /not a verbatim quote/);
   assert.match(annotate(tour(), { ...good, items: Array(9).fill(good.items[0]) }).err, /max 8/);
   assert.match(annotate(tour(), { ...good, whatItDoes: "This change looks safe." }).err, /never gives a verdict/);
+});
+
+test("an all-noise PR needs no intent map", () => {
+  writeFileSync(join(dir, "z.diff"), "diff --git a/x.ts b/y.ts\nsimilarity index 100%\nrename from x.ts\nrename to y.ts\n");
+  const r = tour(false, "Rename x to y", "z.diff");
+  assert.equal(annotate(r, { whatItDoes: "Renames x.ts to y.ts." }).ok, true);
+  assert.deepEqual(JSON.parse(readFileSync(r, "utf8")).unexplained, []);
+});
+
+test("a test left unexplained with its code gets no second ASK WHY item", () => {
+  const r = tour(false, "Speed up booking tests", "y.diff");
+  annotate(r, { whatItDoes: "x", explains: [{ quote: "Speed up booking tests", files: ["vitest.config.ts"] }] });
+  const out = JSON.parse(readFileSync(r, "utf8"));
+  assert.deepEqual(out.unexplained, ["src/domain/booking.ts", "tests/domain/booking.test.ts"]);
+  assert.deepEqual(out.items.filter((i) => i.source === "map").map((i) => i.file), ["src/domain/booking.ts"]);
 });

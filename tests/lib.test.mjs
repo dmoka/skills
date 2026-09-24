@@ -18,6 +18,28 @@ test("glob: **, *, braces, basename patterns", () => {
   assert.ok(globToRegex("drizzle/**").test("drizzle/0001_x.sql"));
 });
 
+test("a test named after its source's name plus a suffix pairs with it", async () => {
+  const { testsSource } = await import("../shared/lib.mjs");
+  assert.ok(testsSource("orders-service", "orders"));
+  assert.ok(!testsSource("ordersx", "orders"));
+  const fs = files(diff("src/services/orders.ts", "@@ -1 +1 @@\n-a\n+b\n") + diff("tests/integration/orders-service.test.ts", "@@ -1 +1 @@\n-  expect(a).toBe(1)\n+  expect(a).toBe(2)\n"));
+  const facts = computeFacts(fs, null);
+  assert.ok(!facts.some((f) => f.kind === "untested-change"));
+  assert.deepEqual(readingOrder(fs, facts, null).map((o) => o.role), ["code", "test"]);
+});
+
+test("a removed assertion points at the removed line, old side", () => {
+  const fs = files(diff("tests/a.test.ts", "@@ -210,4 +210,3 @@\n   it('x', () => {\n     run();\n-    expect(after.id).toMatch(/re_/);\n   });\n"));
+  const [f] = computeFacts(fs, null).filter((x) => x.kind === "assertions-removed");
+  assert.deepEqual([f.line, f.side], [212, "old"]);
+});
+
+test("rule evidence names the files behind a fact condition", () => {
+  const fs = files(diff("src/a.ts", "@@ -1 +1 @@\n-a\n+b\n"));
+  const f = prFacts({ additions: 1, deletions: 1, createdAt: new Date().toISOString(), labels: [] }, fs, null);
+  assert.deepEqual(evalRule({ when: { srcWithoutTests: true } }, f), ["src/a.ts"]);
+});
+
 test("stem pairs tests with sources", () => {
   assert.equal(stemOf("tests/domain/refund.rounding.property.test.ts"), "refund");
   assert.equal(stemOf("src/domain/refund.ts"), "refund");

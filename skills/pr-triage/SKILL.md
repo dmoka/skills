@@ -21,17 +21,26 @@ never through a summarizing fetch tool.
 
 1. **Check the ground.** Inside a git repo with a GitHub remote, `gh auth
    status` green. Otherwise report BLOCKED with the exact failing command.
-2. **Config.** If `.github/pr-review.jsonc` is missing, write a starter one
-   from [references/config.md](references/config.md) — but fill `areas` with
-   this repo's real paths: read the README and the tree, find where money is
-   computed, where auth is checked, where migrations live. Show the file to
-   the user and say plainly: "these points are my proposal; the ranking is
-   yours — edit them." Do not run step 3 until the user confirms or edits it.
-   If the config exists, never edit it without being asked.
+2. **Config.** If `.github/pr-review.jsonc` is missing, draft one from the
+   starter in [references/config.md](references/config.md) into
+   `.pr-review/proposed-config.jsonc` — not into `.github/` yet. Fill `areas`
+   with this repo's real paths: read the README and the tree, find where
+   money is computed, where access is checked, where migrations live. In a
+   repo with no login, every route and server action is a public endpoint —
+   put them in `auth`. You may add rules beyond the starter. Show the draft
+   and say plainly: "these points are my proposal; the ranking is yours —
+   edit them." After the user confirms, move it to `.github/pr-review.jsonc`
+   (they commit it). If the config exists, never edit it without being asked.
 3. **Compute.** `node scripts/triage.mjs` (add `--repo owner/name` when not in
-   the repo). It writes `.pr-review/triage.json` and prints the ranking with
-   the score arithmetic. Exit 2 means the config is missing or has no rules.
-4. **Explain.** Read `triage.json`. Write `.pr-review/triage.notes.json`:
+   the repo; `--config <path>` and `--out <dir>` for a dry run of another
+   config). It writes `.pr-review/triage.json` — per PR: score, matched rules
+   with the files behind each, high facts, and the changed files — and prints
+   the ranking with the score arithmetic. Exit 2 means the config is missing
+   or has no rules. Rerunning it replaces the explanations, so explain after
+   the last compute.
+4. **Explain.** Read `triage.json`, and `gh pr diff <n>` wherever the
+   evidence is not enough to say why a rule fired or whether it fits. Write
+   `.pr-review/triage.notes.json`:
    `{ "summary": "...", "prs": { "<number>": "one sentence" } }`. Each sentence
    says why this PR sits where it sits, in reviewer language, from its
    matched rules and facts: "Changes tax rounding and adds no test — the
@@ -47,19 +56,22 @@ never through a summarizing fetch tool.
 7. **Report** in chat: the top five with their score arithmetic
    (`85 = money 40 + skips-test 35 + stale 10`), rules that never fired,
    and at most three proposed config changes, each with the PR that motivates
-   it. Proposals only — the user edits the rule.
+   it and its effect from a dry run (`--config` a copy, `--out` a scratch
+   folder): "#8 moves 50 → 90, rank 4 → 2". Proposals only — the user edits
+   the rule. A gap the config cannot express goes under blind spots.
 
 ## Hard rules
 
 - **The script ranks; you never do.** Do not reorder, re-score, or drop a PR
   in the notes, the chat, or the HTML. Disagree with a rank? Propose a rule
   change and show which PRs it would move.
-- **No verdicts.** A rank is an order to read in. Never write "safe", "LGTM",
-  "can be merged", or "nothing to review" about any PR — the lowest-ranked PR
-  still gets read.
+- **No verdicts.** A rank is an order to read in. Never call a PR "safe",
+  "LGTM", "fine", "ready to merge", or "nothing to review" — the
+  lowest-ranked PR still gets read. The gate refuses the common phrasings;
+  the rule covers the rest.
 - **Read-only on GitHub.** Never comment, label, approve, request changes,
-  assign, or merge. The output is two files in `.pr-review/`; suggest adding
-  that folder to `.gitignore`.
+  assign, or merge. Outputs live in `.pr-review/`, which `pr-tour` shares; if
+  neither `.gitignore` nor `.git/info/exclude` covers it, suggest adding it.
 - **Name the blind spots** (below) in the report whenever a rule depends on
   one.
 

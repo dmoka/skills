@@ -137,6 +137,7 @@ td.r,th.r{text-align:right}
 .imap>div{padding:8px 0}.imap>div:first-child{padding-right:16px}
 .imap .files{display:flex;flex-wrap:wrap;gap:4px;align-content:flex-start}
 .fchip{font-family:var(--mono);font-size:11px;border:1px solid var(--border2);border-radius:4px;padding:1px 6px;color:var(--fg);background:var(--muted)}
+.fchip.dim{color:var(--mfg);background:transparent}
 .fchip.warn{color:var(--amber);background:var(--amber-bg);border-color:oklch(0.8 0.14 75 / 0.28)}
 .fchip.bad{color:var(--red);background:var(--red-bg);border-color:oklch(0.704 0.191 22.2 / 0.3)}
 .imap-h{font-size:11px;color:var(--dim);margin:12px 0 2px}
@@ -249,8 +250,7 @@ function renderTriage(r) {
   <td class="rank r">${p.rank}</td>
   <td><span class="score ${band(p.score)}">${p.score}</span></td>
   <td>
-    <div class="title"><a href="${esc(p.url)}">${esc(p.title)}</a><span class="n">#${p.number}</span></div>
-    <div class="sub" style="margin-top:3px">${esc(p.author ?? "")}${p.draft ? ` <span class="pill">draft</span>` : ""}${p.labels.map((l) => ` <span class="pill">${esc(l)}</span>`).join("")}</div>
+    <div class="title"><a href="${esc(p.url)}">${esc(p.title)}</a><span class="n">#${p.number}</span><span class="n" style="font-family:var(--sans)">${esc(p.author ?? "")}</span>${p.draft ? ` <span class="pill">draft</span>` : ""}${p.labels.map((l) => ` <span class="pill">${esc(l)}</span>`).join("")}</div>
     ${p.explanation ? `<div class="expl model">${md(p.explanation)}</div>` : ""}
     ${p.facts.length ? `<div class="facts">${p.facts.map((f) => `<div>${md(f.text)} <span class="mono" style="color:var(--dim)">${esc(f.file)}${f.line ? ":" + f.line : ""}</span></div>`).join("")}</div>` : ""}
   </td>
@@ -258,7 +258,7 @@ function renderTriage(r) {
     <div class="chips">${p.matched.length ? p.matched.map((m) => `<span class="chip${m.points < 0 ? " neg" : ""}" title="${esc(m.why)}${m.evidence.length ? " — " + esc(m.evidence.join("; ")) : ""}">${esc(m.id)} <span class="p">${m.points > 0 ? "+" : ""}${m.points}</span></span>`).join("") : `<span class="empty">no rule matched</span>`}</div>
     ${p.matched.length ? `<div class="ev">${p.score} = ${p.matched.map((m) => `${esc(m.id)} ${m.points}`).join(" + ").replace(/\+ -/g, "− ")}</div>` : ""}
   </td>
-  <td class="r num"><span class="plus">+${p.additions}</span> <span class="minus">−${p.deletions}</span><div style="color:var(--dim)">${plural(p.filesChanged, "file")}${p.noiseFiles ? ` · ${p.noiseFiles} noise` : ""}</div></td>
+  <td class="r num"><span class="plus">+${p.additions}</span> <span class="minus">−${p.deletions}</span><div style="color:var(--dim);white-space:nowrap">${plural(p.filesChanged, "file")}${p.noiseFiles ? ` · ${p.noiseFiles} noise` : ""}</div></td>
   <td class="r num">${age(p.ageDays)}</td>
 </tr>`).join("");
 
@@ -319,17 +319,19 @@ function renderTour(r) {
       ? `<div class="unknown" style="margin-bottom:10px">${sevBadge("medium").replace(">medium<", ">title only<")}<p>The title is all the author wrote. Everything the title does not explain is listed under <b>Intent map</b>.</p></div>` : "")
     + r.intent.sources.map(srcBlock).join("<div style='height:10px'></div>");
 
-  const chip = (p, cls = "") => `<a class="fchip ${cls}" href="#f${idx.get(p)}">${esc(p.split("/").pop())}</a>`;
+  const kindOf = new Map(r.files.map((f) => [f.path, f.kind]));
+  const chip = (p, cls = "") => `<a class="fchip ${cls || (kindOf.get(p) === "noise" ? "dim" : "")}" href="#f${idx.get(p)}" title="${esc(p)}">${esc(p.split("/").pop())}</a>`;
+  const allNoise = r.files.every((f) => f.kind === "noise");
   const areaOf = new Map(r.files.map((f) => [f.path, f.areas]));
   const imap = !r.whatItDoes ? `<div class="empty">Not annotated yet.</div>`
     : [
-      ...(r.explains ?? []).filter((e) => e.files.length).map((e) => `<div class="imap"><div><q>${esc(e.quote)}</q></div><div class="files">${e.files.map((p) => chip(p)).join("")}</div></div>`),
-      (r.unexplained ?? []).length ? `<div class="imap-h">Not explained by anything the author wrote — ask why</div><div class="imap"><div style="color:var(--mfg)">${plural(r.unexplained.length, "file")} with no stated reason</div><div class="files">${r.unexplained.map((p) => chip(p, areaOf.get(p)?.length ? "bad" : "warn")).join("")}</div></div>` : `<div class="imap-h">Every changed file is explained by the author's words.</div>`,
-      (r.unmatched ?? []).length ? `<div class="imap-h">Stated, but not visible in this diff</div>${r.unmatched.map((q) => `<div class="imap"><div><q>${esc(q)}</q></div><div class="files"><span class="empty">no matching change</span></div></div>`).join("")}` : "",
+      ...(r.explains ?? []).filter((e) => e.files.length).map((e) => `<div class="imap"><div><q>${md(e.quote)}</q></div><div class="files">${e.files.map((p) => chip(p)).join("")}</div></div>`),
+      (r.unexplained ?? []).length ? `<div class="imap-h">Not explained by anything the author wrote — ask why</div><div class="imap"><div style="color:var(--mfg)">${plural(r.unexplained.length, "file")} with no stated reason</div><div class="files">${r.unexplained.map((p) => chip(p, areaOf.get(p)?.length ? "bad" : "warn")).join("")}</div></div>` : `<div class="imap-h">${allNoise ? "Every change is noise (renames, formatting, lockfiles, generated files) — nothing needs a reason." : "Every changed file is explained by the author's words."}</div>`,
+      (r.unmatched ?? []).length ? `<div class="imap-h">Stated, but not visible in this diff</div>${r.unmatched.map((q) => `<div class="imap"><div><q>${md(q)}</q></div><div class="files"><span class="empty">no matching change</span></div></div>`).join("")}` : "",
     ].join("");
 
   const claims = r.claims.length
-    ? r.claims.map((c) => `<div class="claim"><q>${esc(c.quote)}</q>${c.file ? ` <span class="sep">→</span> check at ${loc(c.file, c.line, c.side)}` : ""}${c.note ? `<div class="note">${md(c.note)}</div>` : ""}</div>`).join("")
+    ? r.claims.map((c) => `<div class="claim"><q>${md(c.quote)}</q>${c.file ? ` <span class="sep">→</span> check at ${loc(c.file, c.line, c.side)}` : ""}${c.note ? `<div class="note">${md(c.note)}</div>` : ""}</div>`).join("")
     : `<div class="empty">${r.intent.status === "UNKNOWN" ? "No stated intent, so no claims to check." : "No checkable claims in the PR text."}</div>`;
 
   const itemRow = (it) => `<div class="item"><div>${sevBadge(it.severity)}</div><div>${srcBadge(it.source)}</div><div><div>${md(it.text)} ${it.file ? `<span class="sep">·</span> ${loc(it.file, it.line, it.side)}` : ""}</div>${it.why ? `<div class="why-t">${md(it.why)}</div>` : ""}</div></div>`;
@@ -397,7 +399,8 @@ function diffTable(f, i, items, foldAt) {
   if (!f.hunks.length) return `<div class="empty" style="padding:10px 12px">${f.status === "renamed" ? "Renamed without content changes." : "No content changes."}</div>`;
   const lang = langOf(f.path);
   const here = items.filter((x) => x.file === f.path && x.line != null);
-  const unanchored = items.filter((x) => x.file === f.path && x.line == null);
+  // File-level low items (area tags) already show in the file header; keep the diff for findings.
+  const unanchored = items.filter((x) => x.file === f.path && x.line == null && x.severity !== "low");
   const rowsFor = (lines) => lines.map((l) => {
     const hits = here.filter((x) => (x.side === "old" ? l.t !== "add" && l.o === x.line : l.t !== "del" && l.n === x.line));
     const sev = hits.length ? hits.map((h) => h.severity).sort((a, b) => ["high", "medium", "low"].indexOf(a) - ["high", "medium", "low"].indexOf(b))[0] : null;

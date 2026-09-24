@@ -37,8 +37,11 @@ Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
    `described`, `title only`, or `UNKNOWN`. It prints the noise line count.
    An empty diff stops here with an error.
 2. **Read** the diff in the reading order (`gh pr diff <n>` or `git diff`),
-   noise included — skim it, it is collapsed for humans, not for you. Open
-   surrounding source when a hunk is not enough.
+   noise included — skim it, it is collapsed for humans, not for you. Read
+   surrounding source **at the PR head**, without checking it out (others
+   may share the checkout): `git fetch origin <head>` then `git show
+   FETCH_HEAD:<path>`. Other open PRs that touch the same code are fair
+   game: a change that breaks another open PR is a medium item.
 3. **Write the WHY** to `.pr-review/tour-<n>.notes.json`. The full format,
    a worked example, and the severity rubric are in
    [references/notes.md](references/notes.md). In short:
@@ -62,15 +65,18 @@ Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
    and the unmatched quotes, and recomputes the reading order. Fix the notes,
    never the check; rerunning is safe.
 5. **Render.** `node scripts/render.mjs <tour.json>` writes the `.html` next
-   to it: one file, no server, safe to publish as a CI artifact. Open it and
-   look at the WHY panel before you report.
+   to it: one file, no server, safe to publish as a CI artifact. Look at it
+   before you report — in a browser if you have one (serve the folder with
+   `python3 -m http.server -d .pr-review` when `file://` is blocked), or at least confirm
+   the WHY panel text in the JSON reads right.
 6. **Report** in chat: the HTML path, the intent status, the unexplained
    files, the high items with `file:line`, and the noise line count.
 
 ## Hard rules
 
-- **Point, never judge.** No "LGTM", "safe", "approve", "exploitable",
-  "no issues". The gate rejects them; do not reword around it.
+- **Point, never judge.** No "LGTM", "looks safe", "approve", "exploitable",
+  "no issues", "nothing to review". The gate rejects the common phrasings;
+  do not reword around it.
 - **Never invent intent.** Only the author's words are intent. Your summary
   goes in `whatItDoes`, where it is labelled as yours. Do not stretch a quote
   to cover a file so the ASK WHY list looks clean — an unexplained file is a
