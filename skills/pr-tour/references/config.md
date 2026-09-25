@@ -84,7 +84,7 @@ model's `why`, `points[]`, `shape[]` (`title`, `kind`, `lang`, `code`) and
 
 ## In CI
 
-The deterministic half needs no model: `triage.mjs` (or `tour.mjs`), then
+The deterministic half needs no model: `triage.mjs` (or, in pr-tour, `tour.mjs`), then
 `render.mjs`, gives the queue and every tour with facts, noise, and reading
 order — attention shows "not judged" and the WHY panel "not annotated yet".
 Upload `.pr-review/review.html` as the build artifact: one file with the

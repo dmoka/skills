@@ -61,7 +61,8 @@ the files in `references/` as raw text with `curl -sSL`.
    a sidebar per tour and instant switching (`#/pr/7`). No server, safe to
    publish as a CI artifact. Look at the queue before you
    report — in a browser if you have one (`python3 -m http.server -d
-   .pr-review` when `file://` is blocked). Check: no PR shows "not judged",
+   .pr-review` when `file://` is blocked; with no browser, open the file with
+   headless Chrome `--dump-dom` and check the same). Check: no PR shows "not judged",
    the order matches your notes, and each evidence link opens its tour at
    the right line.
 6. **Report** in chat: the path to `review.html`, then the queue — level,

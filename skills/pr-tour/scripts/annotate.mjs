@@ -35,7 +35,7 @@ const errors = [];
 const warnings = []; // below the standard, but not wrong: printed, never blocking
 
 // What these reports must never say. They point attention; they do not judge.
-const VERDICT = /\b(LGTM|nothing to review|no need to review|safe to ignore|looks good|looks (?:safe|fine|correct|harmless)|(?:is|are|seems|seem) (?:safe|fine|harmless)|safe to merge|ready to merge|approve[ds]?|good to go|ship it|no issues|nothing to worry|exploitable|is secure|verified safe)\b/i;
+const VERDICT = /\b(LGTM|nothing to review|no need to review|safe to ignore|looks good|looks (?:safe|fine|correct|harmless)|(?:is|are|seems|seem) (?:safe|harmless)|safe to merge|ready to merge|approve[ds]?|good to go|ship it|no issues|nothing to worry|exploitable|is secure|verified safe)\b/i;
 function checkText(where, text, { required = false, max = 600 } = {}) {
   if (text == null || text === "") { if (required) errors.push(`${where}: missing`); return; }
   if (typeof text !== "string") { errors.push(`${where}: must be a string`); return; }

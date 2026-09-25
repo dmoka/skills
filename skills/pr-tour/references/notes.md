@@ -142,12 +142,21 @@ Two kinds of picture appear above the code:
   more files are involved and at least two non-test files are linked. Red and
   amber mark files with high and medium findings. Hide it with
   `"changeMap": false` when it adds nothing.
+  `changeMap: null` in `tour-N.json` means no map will show — then say
+  nothing. Hide a map that only repeats the chapters (three files in a line).
+  `false` hides it; the computed map stays in the JSON for agents.
 - **`diagrams`** — yours, 0–2, only where **flow or structure changes** and a
-  picture explains it faster than the diff. Most PRs need none.
+  picture explains it faster than the diff. Most PRs need none. Both
+  `diagrams` and `changeMap` are top-level fields of the notes.
+- **A flow gets one picture.** A diagram shows how several parts talk; a
+  `shape` view shows the structure of one function, type, or table. Never
+  draw the same flow as both.
 
 | When the change… | Draw a |
 |---|---|
 | alters who calls whom, or the order of calls | `sequence` (`sequenceDiagram`) |
+| sends a wrong value through the same calls | `sequence` with the numbers in the messages |
+| changes what happens when a step fails | `sequence` with `alt` / `else` for the failure path |
 | adds or changes a lifecycle (paid → refunded) | `state` (`stateDiagram-v2`) |
 | changes tables or relations | `er` (`erDiagram`) |
 | reroutes a decision or a pipeline | `flowchart` (`flowchart LR`) |
