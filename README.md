@@ -24,6 +24,7 @@ quietly paraphrases the instructions away.
 | [`mutation-testing`](skills/mutation-testing/SKILL.md) | Measures whether your tests would actually catch bugs — not whether code ran. Detects your stack (JS/TS, C#, Java, Python, Rust, PHP…), sets up the right mutation tool, runs it scoped, explains every surviving mutant as the lie your suite is telling, then writes the killing tests. |
 | [`pr-triage`](skills/pr-triage/SKILL.md) | Reads every open PR and tells you which ones need real attention first — critical, high, medium, low — judged from what each change actually does, not its size or title. Each judgement points at the line that drives it, and each PR opens a full reading tour. No setup. One folder of self-contained HTML plus JSON. |
 | [`pr-tour`](skills/pr-tour/SKILL.md) | Turns one PR into a reading tour: the author's intent and claims first, then where to look and why, then files in the order a reviewer should read them — tests next to their code, lockfiles and renames collapsed last. Points attention, never gives a verdict. |
+| [`grill-me`](skills/grill-me/SKILL.md) | Makes the agent interview you about a plan before it builds anything — one hard question at a time, each with its recommended answer, the codebase checked before you are asked. Refuses a bulk "agree with all". Adapted from Matt Pocock's skill (MIT). |
 
 ## Why mutation testing
 
