@@ -222,6 +222,8 @@ details.codefold[open]>summary{border-bottom-color:var(--border)}
   .main{padding:18px 16px 60px}
   .ev-grid{grid-template-columns:1fr}.ev-grid>section+section{border-left:0;border-top:1px solid var(--border)}
   .tl-rows{grid-template-columns:1fr}.tl-rows dt{padding-top:6px}
+  .tldr{padding:14px}.tl-head{flex-direction:column;gap:4px}.tl-head h1{font-size:15.5px}
+  .topbar{gap:8px;padding:0 10px}.topbar .t-title{font-size:13px}
 }
 .diff tr.pulse td{animation:pulse 1.6s ease-out}
 @keyframes pulse{0%{background:oklch(0.74 0.11 250 / 0.35)}100%{background:transparent}}
