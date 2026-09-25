@@ -36,6 +36,14 @@ if (existsSync(outDir)) {
   }
 }
 
+// Fetch every PR head once, up front: parallel judges fetching into one
+// checkout collide on refs. Judges then read with git show "origin/<head>:<path>".
+const heads = ghJson(["pr", "list", "--state", "open", "--limit", String(args.limit ?? 100), "--json", "headRefName"], { repo }).map((p) => p.headRefName);
+try {
+  execFileSync("git", ["fetch", "--quiet", "origin", ...heads.map((h) => `+refs/heads/${h}:refs/remotes/origin/${h}`)], { stdio: "pipe" });
+  console.log(`fetched ${heads.length} PR heads into origin/<head>`);
+} catch (e) { console.error(`warn: could not fetch PR heads (${String(e.stderr || e.message).trim().split("\n")[0]}) — judges must fetch their own`); }
+
 const prs = [];
 const touches = new Map(); // path -> PR numbers, to find PRs that collide
 for (const { number, createdAt, labels } of open.sort((a, b) => a.number - b.number)) {

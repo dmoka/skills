@@ -201,3 +201,10 @@ test("render packs the viewer and the data into one HTML file", () => {
   assert.match(html, /function renderTour/);
   assert.ok(!/<\/script>[^]*<script type="application\/json"/.test(html.split('id="data">')[1].split("</script>")[0]), "data never closes its own tag");
 });
+
+test("a link target may contain a route group: app/(public)/page.tsx", () => {
+  writeFileSync(join(dir, "p.diff"), "diff --git a/app/(public)/page.tsx b/app/(public)/page.tsx\n--- a/app/(public)/page.tsx\n+++ b/app/(public)/page.tsx\n@@ -1 +1 @@\n-const a = 1;\n+const a = 2;\n");
+  const r = tour(false, "Change the public page", "p.diff");
+  const res = annotate(r, { whatItDoes: "x", explains: [{ quote: "Change the public page", files: ["app/(public)/page.tsx"] }], points: ["the [page](app/(public)/page.tsx:1) changes"] });
+  assert.equal(res.ok, true, res.err);
+});

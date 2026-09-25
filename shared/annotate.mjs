@@ -89,7 +89,7 @@ if (report.kind === "triage") {
     if (line == null) return null;
     const key = side === "old" ? "o" : "n";
     const hit = f.hunks.flatMap((h) => h.lines).find((l) => l[key] === line && (side === "old" ? l.t !== "add" : l.t !== "del"));
-    if (!hit) return `${path}:${line} is not an ${side === "old" ? "old-side (removed or context)" : "new-side (added or context)"} line of this diff`;
+    if (!hit) return `${path}:${line} is not a line of this diff on the ${side === "old" ? "old side (removed or context)" : "new side (added or context)"} — point inside a hunk`;
     if (!code || ws(code).length < 3) return `${path}:${line}: add "code" — a verbatim fragment (3+ chars) of that line, so the pointer can be checked`;
     if (!ws(hit.s).includes(ws(code))) return `${path}:${line} does not contain "${ws(code).slice(0, 50)}" — that line is: ${ws(hit.s).slice(0, 90)}`;
     return null;
@@ -158,7 +158,8 @@ if (report.kind === "triage") {
   if (points.length > 6) errors.push(`points: ${points.length} points, max 6`);
   for (const [i, pt] of points.entries()) {
     checkText(`points[${i}]`, pt, { required: true, max: 240 });
-    for (const m of String(pt).matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)) {
+    // One level of parentheses inside a target: Next.js route groups like app/(public)/page.tsx.
+    for (const m of String(pt).matchAll(/\[([^\]]+)\]\(((?:[^()]|\([^()]*\))+)\)/g)) {
       const [, , target] = m;
       const [path, line] = target.split(/:(\d+)$/);
       if (!files.has(path)) errors.push(`points[${i}]: link target "${target}" is not a file in this diff`);
@@ -208,7 +209,7 @@ if (report.kind === "triage") {
 
   if (!errors.length) {
     report.whatItDoes = notes.whatItDoes;
-    report.attention = at ? { level: at.level, whatHappened: at.whatHappened, why: at.why, file: at.file ?? null, line: at.line ?? null, side: at.side ?? "new" } : null;
+    report.attention = at ? { level: at.level, whatHappened: at.whatHappened, why: at.why, file: at.file ?? null, line: at.line ?? null, side: at.side ?? "new", code: at.code ?? null } : null;
     report.claims = notes.claims ?? [];
     report.items = [
       ...report.items.filter((x) => x.source === "fact"),

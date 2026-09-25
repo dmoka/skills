@@ -62,12 +62,20 @@ Judge the change after you have read it, not from its title or size.
 | **medium** | a real behaviour change a reader should understand, with a contained impact; or a high-level risk in code nothing calls yet |
 | **low** | mechanical or contained: renames, formatting, tests only, dependency bumps with nothing notable |
 
+- **When two rules pull both ways, take the higher level** and say why in
+  `why`. Example: a hidden change (high) in code with no live caller (one
+  lower) stays high.
 - **Code nothing calls yet** is judged one level lower than it would be when
-  wired, and the `why` says what happens once it is.
+  wired, and the `why` says what happens once it is. This lowers the PR's
+  attention only; item severities stay as they are.
+- **Money moved or charged** counts as money. A wrong amount that is only
+  displayed is medium at most.
+- **A money or data action on a live route with no access check** is critical.
 - **A draft is judged like any PR.** Say it is a draft in `why`; do not lower
   the level for it.
 - **Notable in a dependency bump:** a major version change (direct or in the
   lockfile), a raised `engines` floor, a new package, a new install script.
+  A notable bump is medium; a bump with nothing notable is low.
 
 - `whatHappened`: one sentence, plain words, what the PR really does.
 - `why`: one sentence, why it deserves this level. Name the risk, not a verdict.
@@ -94,12 +102,14 @@ runs you — `attention`; empty fields simply do not show.
   Every link target must be a file (optionally `:line`, new side) in the diff.
 - `shape` — 1–3 compact views of the code's **structure**, show-me style, each at
   most 30 lines: `call-tree`, `schema`, `types`, `pseudocode`, `component-tree`,
-  `file-tree`, `contract`. Use `lang: "diff"` with `+`/`-` lines when an existing
-  shape changes; show the whole shape when most of it is new. Keep only the calls,
+  `file-tree`, `contract`. `lang` is `diff` (with `+`/`-` lines, when an
+  existing shape changes), `text` (trees and pseudocode), or the code's
+  language (`ts`, `sql`, `py`, `go`) when you show a whole new shape. Keep only the calls,
   fields, and files the reader needs. Skip `shape` for a rename or a bump.
 - `chapters` — the walkthrough, in the order a reader should go: most important
   first (the core change → the wiring → tests and config). Every non-noise file
-  once; a test with a paired code file follows it by itself. Each chapter gets a
+  once, and never a noise file (noise stays collapsed); a test with a paired
+  code file follows it by itself. A PR that is all noise has no chapters. Each chapter gets a
   one-line `description`. Up to 6 chapters; a small PR needs one or two.
 - `fileNotes` — per file: a **bold one-line takeaway**, then 2–5 `- ` bullets with
   the specific changes, identifiers in backticks. A trivial file needs only the
@@ -118,6 +128,10 @@ These rules apply to every field a reader sees. They are adapted from
 - No filler ("essentially", "it's worth noting", "simply"), no metaphors, no
   closing summary of what the reader just read.
 - Show structure (a `shape` view, bullets) instead of describing it in prose.
+- Never a verdict. The gate refuses "LGTM", "looks good", "looks safe", "is
+  safe", "approve(d)", "ready to merge", "good to go", "ship it", "no issues",
+  "nothing to review", "exploitable", "is secure" — in any field, even inside
+  a longer phrase ("intended and approved"). Say what to check instead.
 
 ## Reading the diff
 
@@ -153,14 +167,16 @@ description, issue, commit, spec.
 - List **code files only**. A test inherits the explanation of the code it
   tests; list a test only when it has no changed code file to pair with.
   Noise never needs a reason; you may map it, and it never shows as ASK WHY.
-- Map a file only when the quote explains **all of its change**. When a file
-  does the stated thing *and* something unstated (a migration that adds the
-  described column and drops another), leave it out so it shows as ASK WHY,
-  and point an item at the unstated part.
+- Map a file when the quote explains its main change. When the file also
+  does something unstated (a migration that adds the described column *and*
+  drops another), still map it, and point a high or medium item at the
+  unstated part — that item is the finding. Leave a file out only when
+  nothing the author wrote explains it at all.
 - A PR whose every file is noise needs no intent map.
 - A file with a small unstated extra (one added attribute) is still ASK WHY —
   that is honest; say it is small in its file note.
-- A sentence that only describes tests maps to the test file.
+- A sentence about tests maps to the test file (list it, even when paired).
+- A quote whose whole change is noise (a rename) maps to the noise files.
 - Quotes are verbatim: backticks, if the author wrote them, are part of it.
 - A quote with no matching change: `"files": []`.
 - A file nothing explains: leave it out. The gate lists it as ASK WHY.
@@ -170,7 +186,9 @@ description, issue, commit, spec.
 A claim is a **checkable promise** — a sentence that could turn out false:
 "no behaviour change for X", "idempotent", "only formatting", "seats stay
 sold", "the UI comes in a follow-up", "no new dependencies" — and a title
-that promises an outcome ("Speed up booking tests"). Descriptive text
+that promises an outcome ("Speed up booking tests"). List every checkable
+promise, whether it holds or not; the `note` says what to check. A sentence
+can be both an intent-map quote and a claim. Descriptive text
 ("adds gift cards") is intent-map material, not a claim. Point each claim at
 the line where a reader can test it (`side: "old"` works here too); a claim
 with no single line gets no `file`. No claims is a valid answer. When the
@@ -191,7 +209,10 @@ is the one this change breaks").
 | **medium** | a behaviour change nobody mentioned, or one worth a test |
 | **low** | worth a glance: cost, naming, a missing edge case with small impact |
 
-Items may point at context lines as well as changed ones. Look for: a claim
+Items point inside the diff hunks: at added, removed (`side: "old"`), or
+context lines shown in the hunk. Something outside the diff goes in the
+`why` of an item that points at the line in the diff it affects. A low PR
+needs items only for what a reader should still check. Look for: a claim
 the code contradicts; a risky decision nobody mentioned; a
 missing security decision (a new input with no validation, a new action with
 no authorization check, a secret reaching a log); an edge case the tests skip;

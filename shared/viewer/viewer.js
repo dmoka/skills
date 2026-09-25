@@ -24,7 +24,7 @@
     return esc(s)
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text, target) => {
+      .replace(/\[([^\]]+)\]\(((?:[^()]|\([^()]*\))+)\)/g, (m, text, target) => {
         const href = link ? link(target.replace(/&amp;/g, "&")) : null;
         return href ? `<a class="kw" href="${href}">${text}</a>` : text;
       });
@@ -350,7 +350,8 @@ ${overlaps}
     if (!f.hunks.length) return `<div class="empty" style="padding:10px 12px">${f.status === "renamed" ? "Renamed without content changes." : "No content changes."}</div>`;
     const lang = langOf(f.path);
     const here = items.filter((x) => x.file === f.path && x.line != null);
-    const unanchored = items.filter((x) => x.file === f.path && x.line == null && x.severity !== "low");
+    // File-level findings only; ASK WHY already shows in the TL;DR, the intent map and Where to look.
+    const unanchored = items.filter((x) => x.file === f.path && x.line == null && x.severity !== "low" && x.source !== "map");
     const annBox = (h) => `<div class="ann-box">${sev(h.severity)}${src(h.source)}<div class="t">${inline(h.text)}${h.why ? `<div>${inline(h.why)}</div>` : ""}</div></div>`;
     const rows = (ls) => ls.map((l) => {
       const hits = here.filter((x) => (x.side === "old" ? l.t !== "add" && l.o === x.line : l.t !== "del" && l.n === x.line));

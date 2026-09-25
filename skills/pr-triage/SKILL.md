@@ -27,7 +27,8 @@ the files in `references/` as raw text with `curl -sSL`.
 2. **Compute.** `node scripts/triage.mjs` (add `--repo owner/name` outside
    the repo). For every open PR it writes `.pr-review/tour-<n>.json` — files,
    noise, FACT items, reading order, the author's words — and it writes
-   `.pr-review/triage.json` listing them, and renders the unjudged pages. No
+   `.pr-review/triage.json` listing them, fetches every PR head once into
+   `origin/<head>` for the judges, and renders the unjudged page. No
    model is involved. Rerunning replaces the reports and pages, judgements
    included, and removes those of PRs that closed — judge after the last
    run.
@@ -47,9 +48,10 @@ the files in `references/` as raw text with `curl -sSL`.
    own merits.
 4. **Order the queue.** Read every PR's `attention`. Write
    `.pr-review/triage.notes.json`: `{ "summary": "...", "order": [7, 6, ...] }`
-   — most attention first, by level; within a level, irreversible before
-   reversible, live code paths before code nothing calls yet, and what
-   blocks other PRs before what does not. The summary is two or three
+   — most attention first, by level. Within a level, apply these in order
+   and stop at the first that separates two PRs: irreversible before
+   reversible; live code before code nothing calls yet; a PR that conflicts
+   with others (`overlaps`) before one that does not; older before newer. The summary is two or three
    sentences on the queue as a whole; use `overlaps` in `triage.json` (files
    two or more PRs change) for conflicts between PRs.
    `node scripts/annotate.mjs .pr-review/triage.json .pr-review/triage.notes.json`
@@ -68,13 +70,14 @@ the files in `references/` as raw text with `curl -sSL`.
 
 ## Judge brief
 
-Fill in the absolute paths and hand this, and nothing else, to each judge:
+Fill in the absolute paths and HEAD_BRANCH (`pr.head` in `tour-N.json`), and
+hand this, and nothing else, to each judge:
 
 > Judge pull request #N in the git repo at REPO (run commands there). Read
 > SKILL_DIR/references/notes.md and follow it. Read the PR with `gh pr diff N`
 > and `gh pr view N`; read surrounding code at the PR head with
-> `git fetch origin HEAD_BRANCH` then `git show "origin/HEAD_BRANCH:<path>"`.
-> Never check out a branch — others share this checkout. Skim noise; when
+> `git show "origin/HEAD_BRANCH:<path>"` — it is already fetched; do not run
+> `git fetch`. Never check out a branch — others share this checkout. Skim noise; when
 > the author claims something about it ("formatting only"), check the claim
 > with any tool you like. Write REPO/.pr-review/tour-N.notes.json, including
 > the `attention` block, then run `node SKILL_DIR/scripts/annotate.mjs
