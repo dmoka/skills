@@ -20,15 +20,17 @@ for (const name of readdirSync("shared").filter((f) => /\.(mjs|md)$/.test(f))) {
     else { writeFileSync(dst, src); console.log(`synced ${dst}`); }
   }
 }
-// shared/viewer/* -> <skill>/scripts/viewer/
-for (const name of readdirSync("shared/viewer")) {
-  const src = readFileSync(`shared/viewer/${name}`, "utf8");
-  for (const dir of SKILLS) {
-    mkdirSync(`${dir}/scripts/viewer`, { recursive: true });
-    const dst = `${dir}/scripts/viewer/${name}`;
-    if (existsSync(dst) && readFileSync(dst, "utf8") === src) continue;
-    if (check) { console.error(`drift: ${dst} differs from shared/viewer/${name}`); drift++; }
-    else { writeFileSync(dst, src); console.log(`synced ${dst}`); }
+// shared/viewer/* and shared/vendor/* -> <skill>/scripts/viewer|vendor/
+for (const sub of ["viewer", "vendor"]) {
+  for (const name of readdirSync(`shared/${sub}`)) {
+    const src = readFileSync(`shared/${sub}/${name}`, "utf8");
+    for (const dir of SKILLS) {
+      mkdirSync(`${dir}/scripts/${sub}`, { recursive: true });
+      const dst = `${dir}/scripts/${sub}/${name}`;
+      if (existsSync(dst) && readFileSync(dst, "utf8") === src) continue;
+      if (check) { console.error(`drift: ${dst} differs from shared/${sub}/${name}`); drift++; }
+      else { writeFileSync(dst, src); console.log(`synced ${dst}`); }
+    }
   }
 }
 if (drift) { console.error("run: node tools/sync-shared.mjs"); process.exit(1); }

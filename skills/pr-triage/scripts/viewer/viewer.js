@@ -248,8 +248,15 @@ ${overlaps}
       }).join("");
       return `<div class="box"><div class="shape-h">${esc(v.title)} <span class="tag tag-src">${esc(v.kind)}</span><span class="grow"></span>${MODEL}</div><pre>${body}</pre></div>`;
     };
-    const shape = r.shape?.length ? `
-<section class="sec" id="shape"><div class="sec-h">Shape of the change <span class="count">structure before code</span></div><div class="shape">${r.shape.map(shapeView).join("")}</div></section>` : "";
+    const diagramView = (d) => `<div class="box dgm-box"><div class="shape-h">${esc(d.title)} <span class="tag tag-src">${esc(d.kind)}</span><span class="grow"></span>${MODEL}</div>${d.svg ? `<div class="dgm">${d.svg}</div>` : `<pre class="dgm-fail">${esc(d.mermaid)}</pre>`}${d.caption ? `<div class="dgm-cap">${inline(d.caption, link)}</div>` : ""}</div>`;
+    const views = [...(r.diagramsSvg ?? []).map(diagramView), ...(r.shape ?? []).map(shapeView)];
+    const shape = views.length ? `
+<section class="sec" id="shape"><div class="sec-h">Shape of the change <span class="count">structure before code</span></div><div class="shape">${views.join("")}</div></section>` : "";
+    const cm = r.changeMapSvg;
+    const changeMap = cm?.svg ? `
+<section class="sec" id="map"><div class="sec-h">Where it fits <span class="count">changed files and which uses which · computed from the imports at the PR head · click a file to open it</span></div>
+<div class="box dgm-box"><div class="dgm cmap" data-links="${esc(JSON.stringify(Object.fromEntries(Object.entries(cm.links).map(([label, p]) => [label, anchor(p)]))))}">${cm.svg}</div>
+<div class="dgm-cap legend"><span><i class="lg lg-hot"></i>high finding</span><span><i class="lg lg-warn"></i>medium finding</span><span><i class="lg lg-test"></i>test</span><span>arrow = uses</span></div></div></section>` : "";
 
     // --- where to look ---
     const itemRow = (it) => `<div class="item"><div>${sev(it.severity)}</div><div>${src(it.source)}</div><div><div>${inline(it.text)} ${it.file ? `<span class="sep">·</span> ${loc(it.file, it.line, it.side)}` : ""}</div>${it.why ? `<div class="why-t">${inline(it.why)}</div>` : ""}</div></div>`;
@@ -308,6 +315,7 @@ ${overlaps}
     const outline = [
       out("tldr", "—", "TL;DR"),
       overview && out("overview", "—", "Overview"),
+      changeMap && out("map", "—", "Where it fits"),
       shape && out("shape", "—", "Shape of the change"),
       out("look", "—", `Where to look <span style="color:var(--dim)">${major.length}</span>`),
       out("evidence", "—", "Intent and evidence"),
@@ -337,7 +345,7 @@ ${overlaps}
     <div class="side-sec"><span class="side-label">Files changed (${r.files.length})</span><ul class="flist">${flist}</ul></div>
   </nav>
   <main class="main">
-    ${tldr}${overview}${shape}${look}${evidence}
+    ${tldr}${overview}${changeMap}${shape}${look}${evidence}
     <section class="sec" style="margin-top:36px"><div class="sec-h">Walkthrough <span class="count">${esc(r.chapters?.length ? "grouped by the judge" : r.orderRule)}</span></div></section>
     ${walkthrough}${noiseBlock}
     <div class="footer"><span>This tour points attention. It gives no merge verdict and no security verdict.</span><span>Collapsed means low reading value, not verified.</span><span>Blue = written by the model.</span></div>
@@ -375,6 +383,17 @@ ${overlaps}
       menu.onclick = () => { side.classList.toggle("is-open"); overlay.classList.toggle("is-open"); };
       overlay.onclick = close;
       side.querySelectorAll("a").forEach((x) => x.addEventListener("click", () => { if (innerWidth <= 900) close(); }));
+    }
+    // Change-map nodes open their file.
+    for (const box of app.querySelectorAll(".cmap[data-links]")) {
+      const map = JSON.parse(box.dataset.links);
+      for (const t of box.querySelectorAll("text")) {
+        const target = map[t.textContent.trim()];
+        if (!target) continue;
+        const g = t.closest("g") ?? t;
+        g.style.cursor = "pointer";
+        g.addEventListener("click", () => { location.hash = target.slice(1); });
+      }
     }
     const links = [...app.querySelectorAll(".outline a[data-target]")];
     if (!links.length) return;

@@ -76,7 +76,9 @@ its code's explanation), `unmatched[]` (derived: quotes with no file),
 `side`, `text`, `why`), `fileNotes`, `order[]` (`path`, `role`: `code` |
 `test` | `noise`, `pairedWith`, `why`), `orderRule`, and `files[]` (`path`,
 `oldPath`, `status`, `kind`, `noise`, `areas`, `additions`, `deletions`,
-`hunks[]` with `lines[]` of `{ t: "add"|"del"|"ctx", s, o, n }`), plus the
+`hunks[]` with `lines[]` of `{ t: "add"|"del"|"ctx", s, o, n }`), `changeMap`
+(computed: `nodes[]` of `{ path, layer }`, `edges[]` of `{ from, to }`, or
+null), `diagrams[]` (model: `title`, `kind`, `mermaid`, `caption`), plus the
 model's `why`, `points[]`, `shape[]` (`title`, `kind`, `lang`, `code`) and
 `chapters[]` (`title`, `description`, `files`, tests placed after their code).
 

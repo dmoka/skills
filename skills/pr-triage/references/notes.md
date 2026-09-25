@@ -133,6 +133,42 @@ These rules apply to every field a reader sees. They are adapted from
   "nothing to review", "exploitable", "is secure" — in any field, even inside
   a longer phrase ("intended and approved"). Say what to check instead.
 
+## Diagrams
+
+Two kinds of picture appear above the code:
+
+- **Where it fits** — computed, no model: the changed files and which uses
+  which, read from the imports at the PR head. It shows only when three or
+  more files are involved and at least two non-test files are linked. Red and
+  amber mark files with high and medium findings. Hide it with
+  `"changeMap": false` when it adds nothing.
+- **`diagrams`** — yours, 0–2, only where **flow or structure changes** and a
+  picture explains it faster than the diff. Most PRs need none.
+
+| When the change… | Draw a |
+|---|---|
+| alters who calls whom, or the order of calls | `sequence` (`sequenceDiagram`) |
+| adds or changes a lifecycle (paid → refunded) | `state` (`stateDiagram-v2`) |
+| changes tables or relations | `er` (`erDiagram`) |
+| reroutes a decision or a pipeline | `flowchart` (`flowchart LR`) |
+| reshapes types and their links | `class` (`classDiagram`) |
+
+```json
+"diagrams": [{
+  "title": "What a full cancel pays",
+  "kind": "sequence",
+  "mermaid": "sequenceDiagram\n  participant S as cancelOrder\n  participant R as refund module\n  participant P as payments\n  S->>R: previewCancellation()\n  R-->>S: gross 100.00, fee 2.00, net 98.00\n  S->>P: refund(net - fee) = 96.00",
+  "caption": "The fee comes off twice: `netCents` already excludes it."
+}]
+```
+
+Rules: at most 40 lines; 3–8 boxes or participants; real names from the
+code; the numbers of a concrete example when it makes the point. Quote any
+label with brackets, parentheses, or a slash: `A["refund (net)"]`. Write
+sequence messages as `A->>B: text`. The gate rejects a diagram that does
+not parse into real content, and it is rendered to SVG when the page is
+packed — a broken one shows its source instead.
+
 ## Reading the diff
 
 Read it as a diff — `gh pr diff <n>` or `git diff <base>...<head>` — in the

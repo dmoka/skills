@@ -9,7 +9,9 @@ import { join } from "node:path";
 import {
   SCHEMA_VERSION, gh, ghJson, parseDiff, classifyAll, computeFacts, readingOrder, DEFAULT_READING_ORDER,
   isInformative, issueRefs, branchSlug, intentStatus, INTENT_RANK,
+  matchAny,
 } from "./lib.mjs";
+import { buildChangeMap } from "./diagrams.mjs";
 
 export const ORDER_RULE = "hotspots (any high-severity item) first, then by layer (alphabetical within a layer); each test right after the code it tests; tests with no changed source next; noise collapsed last";
 
@@ -30,7 +32,7 @@ export function buildTour(source, cfg, configPath) {
   const repo = source.repo ?? null;
 
   if (source.number != null && repo) {
-    pr = ghJson(["pr", "view", String(source.number), "--json", "number,title,body,author,url,baseRefName,headRefName,createdAt,isDraft,closingIssuesReferences,commits"], { repo });
+    pr = ghJson(["pr", "view", String(source.number), "--json", "number,title,body,author,url,baseRefName,headRefName,headRefOid,createdAt,isDraft,closingIssuesReferences,commits"], { repo });
     commits = (pr.commits ?? []).map((c) => ({ subject: (c.messageHeadline || "").trim(), body: (c.messageBody || "").trim() }));
     diffText = gh(["pr", "diff", String(source.number)], { repo });
   } else {
@@ -93,6 +95,15 @@ export function buildTour(source, cfg, configPath) {
   classifyAll(files, cfg);
   const facts = computeFacts(files, cfg);
 
+  // The change map: which changed files use which, read at the PR head.
+  const layers = cfg?.tour?.readingOrder ?? DEFAULT_READING_ORDER;
+  const kindOf = new Map(files.map((f) => [f.path, f.meta.kind]));
+  const layerOf = (p) => (kindOf.get(p) === "test" ? "tests" : layers.find((l) => matchAny(p, l.paths))?.name ?? "other");
+  const readText = headReader(source, pr, repo, files);
+  let changeMap = null;
+  try { changeMap = buildChangeMap(files.map((f) => ({ path: f.path, kind: f.meta.kind })).filter((f) => files.find((x) => x.path === f.path).status !== "deleted"), readText, layerOf); }
+  catch { /* a map is a nice-to-have; never fail the tour for it */ }
+
   return {
     kind: "tour",
     schemaVersion: SCHEMA_VERSION,
@@ -119,6 +130,7 @@ export function buildTour(source, cfg, configPath) {
     claims: [],
     items: facts,     // FACT items now; LOOK HERE and ASK WHY items get appended by annotate.mjs
     fileNotes: {},
+    changeMap,        // { nodes, edges } — computed; null when fewer than 2 files or no import between them
     order: readingOrder(files, facts, cfg),
     orderRule: ORDER_RULE,
     files: files.map((f) => ({
@@ -127,6 +139,32 @@ export function buildTour(source, cfg, configPath) {
       kind: f.meta.kind, noise: f.meta.noise, areas: f.meta.areas,
       hunks: f.hunks,
     })),
+  };
+}
+
+// Reads a changed file as it is at the PR head: the local remote-tracking
+// branch when it exists (pr-triage fetches it), else the GitHub API; for a
+// saved diff, only the added lines are known.
+function headReader(source, pr, repo, files) {
+  const cache = new Map();
+  let ref = null;
+  if (source.git) ref = source.git.split(/\.{2,3}/)[1];
+  else if (repo && pr.headRefName) {
+    try { git(["rev-parse", "--verify", "-q", `origin/${pr.headRefName}`]); ref = `origin/${pr.headRefName}`; }
+    catch {
+      try { git(["fetch", "--quiet", "origin", `+refs/heads/${pr.headRefName}:refs/remotes/origin/${pr.headRefName}`]); ref = `origin/${pr.headRefName}`; } catch { ref = null; }
+    }
+  }
+  return (path) => {
+    if (cache.has(path)) return cache.get(path);
+    let text = null;
+    try {
+      if (ref) text = git(["show", `${ref}:${path}`]);
+      else if (repo && pr.headRefOid) text = gh(["api", `repos/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${pr.headRefOid}`, "-H", "Accept: application/vnd.github.raw"]);
+      else { const f = files.find((x) => x.path === path); text = f ? f.hunks.flatMap((h) => h.lines.filter((l) => l.t !== "del").map((l) => l.s)).join("\n") : null; }
+    } catch { text = null; }
+    cache.set(path, text);
+    return text;
   };
 }
 

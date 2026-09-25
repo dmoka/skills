@@ -12,6 +12,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, rmSync } from "no
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "./lib.mjs";
+import { render as renderMermaid, changeMapMermaid } from "./diagrams.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const input = args._[0];
@@ -38,6 +39,17 @@ if (report.kind === "triage") {
   outPath = args.out ?? input.replace(/\.json$/, ".html");
   title = `#${report.pr.number} · ${report.pr.title}`;
 } else { console.error(`unknown report kind "${report.kind}"`); process.exit(1); }
+
+// Diagrams become SVG here, at pack time: readers get no diagram library.
+for (const t of Object.values(data.tours)) {
+  const sev = (p) => { const s = t.items.filter((x) => x.file === p).map((x) => x.severity); return s.includes("high") ? "high" : s.includes("medium") ? "medium" : null; };
+  const safe = (src) => { try { return renderMermaid(src); } catch (e) { return null; } };
+  t.diagramsSvg = (t.diagrams ?? []).map((d) => ({ ...d, svg: safe(d.mermaid) }));
+  if (t.changeMap && t.showChangeMap !== false) {
+    const cm = changeMapMermaid(t.changeMap, { severity: sev, unexplained: t.unexplained ?? [] });
+    t.changeMapSvg = { svg: safe(cm.mermaid), links: cm.links, mermaid: cm.mermaid };
+  }
+}
 
 // JSON inside <script>: escape what could end the tag or break the parser.
 const json = JSON.stringify(data).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");

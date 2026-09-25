@@ -12,6 +12,8 @@
 //                 "why": "<verbatim author words: the reason for the change>",
 //                 "points": ["short line with a [keyword](src/file.ts:12) link", ...],
 //                 "chapters": [{ "title": "...", "description": "...", "files": ["<path>", ...] }],
+//                 "diagrams": [{ "title": "...", "kind": "sequence|flowchart|state|er|class", "mermaid": "...", "caption": "..." }],
+//                 "changeMap": false,   (hide the computed change map when it adds nothing)
 //                 "shape": [{ "title": "...", "kind": "call-tree|schema|types|pseudocode|component-tree|file-tree|contract", "lang": "diff|text|ts|sql|...", "code": "..." }],
 //                 "claims": [{ "quote": "<verbatim from the PR text>", "file": "...", "line": 12, "code": "<fragment of that line>", "note": "..." }],
 //                 "items":  [{ "severity": "high|medium|low", "file": "...", "line": 12, "code": "<fragment of that line>", "side": "new|old",
@@ -23,6 +25,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { readingOrder, stemOf, testsSource } from "./lib.mjs";
+import { checkMermaid, DIAGRAM_KINDS } from "./diagrams.mjs";
 
 const [reportPath, notesPath] = process.argv.slice(2);
 if (!reportPath || !notesPath) { console.error("usage: annotate.mjs <report.json> <notes.json>"); process.exit(1); }
@@ -196,6 +199,20 @@ if (report.kind === "triage") {
     }
   }
 
+  // Diagrams: 0–2, only where flow or structure changes. Must have content and render.
+  const diagrams = notes.diagrams ?? [];
+  if (diagrams.length > 2) errors.push(`diagrams: ${diagrams.length} diagrams, max 2 — draw only where flow or structure changes`);
+  for (const [i, d] of diagrams.entries()) {
+    checkText(`diagrams[${i}].title`, d.title, { required: true, max: 80 });
+    checkText(`diagrams[${i}].caption`, d.caption, { max: 240 });
+    if (!Object.keys(DIAGRAM_KINDS).includes(d.kind)) errors.push(`diagrams[${i}].kind: one of ${Object.keys(DIAGRAM_KINDS).join(", ")}`);
+    else { const e = checkMermaid(d.mermaid, d.kind); if (e) errors.push(`diagrams[${i}].mermaid: ${e}`); }
+    const labels = [...String(d.mermaid ?? "").matchAll(/["\[(:]\s*([^"\]\n)]+)/g)].map((m) => m[1]).join(" ");
+    const v = labels.match(VERDICT);
+    if (v) errors.push(`diagrams[${i}]: contains "${v[0]}" — diagrams point attention too`);
+  }
+  if (notes.changeMap != null && typeof notes.changeMap !== "boolean") errors.push("changeMap: true or false");
+
   // Shape: 1–3 compact structural views, show-me style.
   const SHAPES = ["call-tree", "schema", "types", "pseudocode", "component-tree", "file-tree", "contract"];
   const shape = notes.shape ?? [];
@@ -217,6 +234,8 @@ if (report.kind === "triage") {
     ];
     report.fileNotes = notes.fileNotes ?? {};
     report.why = notes.why ?? null;
+    report.diagrams = diagrams.map((d) => ({ title: d.title, kind: d.kind, mermaid: d.mermaid, caption: d.caption ?? null }));
+    report.showChangeMap = notes.changeMap !== false;
     report.points = points;
     report.shape = shape.map((v) => ({ title: v.title, kind: v.kind, lang: v.lang ?? "text", code: v.code }));
     // Chapters with each unlisted test placed right after its code.

@@ -138,3 +138,25 @@ test("intent: informative titles, issue refs, status by strongest source", async
   assert.equal(intentStatus([{ type: "spec", text: "x" }]), "spec");
 });
 
+
+test("change map: imports resolve to changed files, a test-only link is not enough", async () => {
+  const { importsOf, resolveImport, buildChangeMap, changeMapMermaid, checkMermaid } = await import("../shared/diagrams.mjs");
+  assert.deepEqual(importsOf(`import { a } from "../db/orders-repo";\nimport x from '@/src/db/client'\nconst y = require("./util")`, "src/services/orders.ts"), ["../db/orders-repo", "@/src/db/client", "./util"]);
+  const paths = ["src/db/orders-repo.ts", "src/db/client.ts", "src/services/orders.ts", "src/services/util/index.ts"];
+  assert.equal(resolveImport("../db/orders-repo", "src/services/orders.ts", paths), "src/db/orders-repo.ts");
+  assert.equal(resolveImport("@/src/db/client", "app/page.tsx", paths), "src/db/client.ts");
+  assert.equal(resolveImport("./util", "src/services/orders.ts", paths), "src/services/util/index.ts");
+  assert.equal(resolveImport("react", "app/page.tsx", paths), null);
+  const text = { "src/services/orders.ts": `import { a } from "../db/orders-repo";`, "tests/orders.test.ts": `import { a } from "../src/services/orders";` };
+  const files = [{ path: "src/db/orders-repo.ts", kind: "source" }, { path: "src/services/orders.ts", kind: "source" }, { path: "tests/orders.test.ts", kind: "test" }];
+  const map = buildChangeMap(files, (p) => text[p] ?? "", () => "x");
+  assert.deepEqual(map.edges, [{ from: "src/services/orders.ts", to: "src/db/orders-repo.ts" }, { from: "tests/orders.test.ts", to: "src/services/orders.ts" }]);
+  assert.equal(buildChangeMap(files, (p) => (p.includes("test") ? text[p] : ""), () => "x"), null, "only a test link: no map");
+  const m = changeMapMermaid(map, { severity: (p) => (p.includes("services") ? "high" : null) });
+  assert.match(m.mermaid, /class n1 hot/);
+  assert.equal(checkMermaid(m.mermaid, "flowchart"), null);
+  assert.match(checkMermaid("flowchart LR\n A -->", "flowchart"), /node/);
+  assert.match(checkMermaid("sequenceDiagram\n A->>B hi", "sequence"), /no message/);
+  assert.match(checkMermaid("pie\n a: 1"), /not a supported diagram/);
+  assert.equal(checkMermaid("sequenceDiagram\n A->>B: hi", "sequence"), null);
+});

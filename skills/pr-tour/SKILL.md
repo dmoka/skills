@@ -51,8 +51,9 @@ Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
      the top of the tour.
    - `whatItDoes` — one or two sentences on what the diff actually does,
      shown as the model's reading, never as the author's intent.
-   - `why`, `points`, `shape`, `chapters` — the author's reason (quoted),
-     a 3–5 line overview with keyword links, 1–3 structure views, and the
+   - `why`, `points`, `shape`, `diagrams`, `chapters` — the author's reason
+     (quoted), a 3–5 line overview with keyword links, 1–3 structure views,
+     0–2 Mermaid diagrams where flow or structure changes, and the
      walkthrough grouped into chapters. All optional; see the reference.
    - `explains` — **the intent map**: each thing the author says the PR
      does, quoted verbatim, with the code files that implement it. Leave out

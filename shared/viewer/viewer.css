@@ -228,3 +228,17 @@ details.codefold[open]>summary{border-bottom-color:var(--border)}
 .diff tr.pulse td{animation:pulse 1.6s ease-out}
 @keyframes pulse{0%{background:oklch(0.74 0.11 250 / 0.35)}100%{background:transparent}}
 .noscript{max-width:640px;margin:80px auto;padding:0 16px;color:var(--mfg)}
+
+/* diagrams */
+.dgm-box{overflow:hidden}
+.dgm{padding:14px 10px;overflow:auto;text-align:center}
+.dgm svg{max-width:100%;height:auto}
+.dgm-cap{padding:8px 14px;border-top:1px solid var(--border);color:var(--mfg);font-size:12.5px}
+.dgm-fail{margin:0;padding:12px 14px;color:var(--mfg);font-family:var(--mono);font-size:12px;white-space:pre-wrap}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11.5px;color:var(--dim)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.lg{display:inline-block;width:12px;height:8px;border-radius:2px;border:1.5px solid}
+.lg-hot{border-color:#f0706e}.lg-warn{border-color:#e9b04a}.lg-test{border-color:#6e6e76}
+.cmap svg g{transition:opacity .15s}.cmap svg g[style*="pointer"]:hover{opacity:.8}
+.dgm svg{--bg:var(--card)!important;background:transparent!important}
+.dgm svg text{font-family:var(--sans)!important}
