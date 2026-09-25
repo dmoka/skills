@@ -55,13 +55,14 @@ the files in `references/` as raw text with `curl -sSL`.
    `node scripts/annotate.mjs .pr-review/triage.json .pr-review/triage.notes.json`
    checks every PR is placed once, judged, and never below a lower level.
 5. **Render.** `node scripts/render.mjs .pr-review/triage.json` writes
-   `triage.html` and every `tour-<n>.html`, linked both ways: one folder, no
-   server, safe to publish as a CI artifact. Look at the queue before you
+   `.pr-review/review.html`: one file holding the queue and every tour, with
+   a sidebar per tour and instant switching (`#/pr/7`). No server, safe to
+   publish as a CI artifact. Look at the queue before you
    report — in a browser if you have one (`python3 -m http.server -d
    .pr-review` when `file://` is blocked). Check: no PR shows "not judged",
    the order matches your notes, and each evidence link opens its tour at
    the right line.
-6. **Report** in chat: the path to `triage.html`, then the queue — level,
+6. **Report** in chat: the path to `review.html`, then the queue — level,
    PR, what happened, why — critical and high in full, the rest as one line
    each.
 
@@ -108,8 +109,7 @@ Fill in the absolute paths and hand this, and nothing else, to each judge:
 ## Done means
 
 - `triage.json` passed `annotate.mjs`, and so did every tour's notes.
-- `triage.html` and one `tour-<n>.html` per open PR exist and link to each
-  other.
+- `review.html` exists and opens every PR's tour from the queue.
 - The chat report gives the queue with levels and reasons, most attention
   first.
 - Nothing on GitHub changed.

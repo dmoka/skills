@@ -173,3 +173,31 @@ test("triage order: complete, judged, and never a lower level above a higher one
   const out = JSON.parse(readFileSync(triage, "utf8"));
   assert.deepEqual(out.prs.map((p) => [p.number, p.rank, p.attention.level]), [[2, 1, "critical"], [3, 2, "high"], [1, 3, "low"]]);
 });
+
+test("why, points, chapters, shape: checked against the author's text and the diff", () => {
+  const r = tour(false, "Speed up booking tests", "y.diff");
+  const ok = { whatItDoes: "x", explains: [{ quote: "Speed up booking tests", files: ["vitest.config.ts"] }] };
+  const run = (extra) => annotate(r, { ...ok, ...extra });
+  assert.equal(run({ why: "Speed up booking tests", points: ["the cap moves in [bookTickets](src/domain/booking.ts)"],
+    chapters: [{ title: "The cap", files: ["src/domain/booking.ts"] }, { title: "Config", files: ["vitest.config.ts"] }],
+    shape: [{ title: "reserve", kind: "pseudocode", lang: "diff", code: " reserve\n-  cap = 10\n+  cap = 12" }] }).ok, true);
+  const out = JSON.parse(readFileSync(r, "utf8"));
+  // The unlisted test follows its code inside the chapter.
+  assert.deepEqual(out.chapters[0].files, ["src/domain/booking.ts", "tests/domain/booking.test.ts"]);
+  assert.match(run({ why: "we wanted speed" }).err, /why: .* not a verbatim quote/);
+  assert.match(run({ points: ["see [here](src/nope.ts)"] }).err, /not a file in this diff/);
+  assert.match(run({ points: ["see [here](src/domain/booking.ts:99)"] }).err, /not a new-side line/);
+  assert.match(run({ chapters: [{ title: "A", files: ["src/domain/booking.ts"] }] }).err, /"vitest.config.ts" is in no chapter/);
+  assert.match(run({ chapters: [{ title: "A", files: ["src/domain/booking.ts", "vitest.config.ts", "package-lock.json"] }] }).err, /is noise/);
+  assert.match(run({ shape: [{ title: "x", kind: "poem", code: "a" }] }).err, /kind: one of/);
+  assert.match(run({ shape: [{ title: "x", kind: "types", code: Array(31).fill("a").join("\n") }] }).err, /max 30/);
+});
+
+test("render packs the viewer and the data into one HTML file", () => {
+  const r = tour(false, "Speed up booking tests", "y.diff");
+  execFileSync("node", ["skills/pr-tour/scripts/render.mjs", r]);
+  const html = readFileSync(r.replace(/\.json$/, ".html"), "utf8");
+  assert.match(html, /<script type="application\/json" id="data">\{"tours":\{"local":/);
+  assert.match(html, /function renderTour/);
+  assert.ok(!/<\/script>[^]*<script type="application\/json"/.test(html.split('id="data">')[1].split("</script>")[0]), "data never closes its own tag");
+});

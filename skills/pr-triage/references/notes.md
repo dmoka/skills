@@ -15,7 +15,21 @@ is safe; it replaces the previous notes).
     "why": "Customers can be charged a stale price; the PR says checkout always uses the live price.",
     "file": "src/cart/checkout.ts", "line": 41, "code": "getPrice(item.sku)"
   },
-  "whatItDoes": "Two or three sentences: what the diff actually does.",
+  "whatItDoes": "One or two sentences: what the diff actually does.",
+  "why": "Prices change a few times a day, and every page load hit the database.",
+  "points": [
+    "prices are cached for five minutes in [getPrice](src/catalog/prices.ts)",
+    "[checkout](src/cart/checkout.ts:41) now reads the cached price",
+    "no test covers a price change during checkout"
+  ],
+  "shape": [
+    { "title": "Where checkout gets its price", "kind": "call-tree", "lang": "diff",
+      "code": " checkout(cart)\n   for item in cart\n-    getLivePrice(item.sku)\n+    getPrice(item.sku)\n+      cache.get(sku) ?? load(sku)" }
+  ],
+  "chapters": [
+    { "title": "The cache", "description": "Where prices are stored and for how long.", "files": ["src/catalog/prices.ts"] },
+    { "title": "Who reads it", "description": "Checkout switches to the cached price.", "files": ["src/cart/checkout.ts"] }
+  ],
   "explains": [
     { "quote": "Cache product prices for five minutes", "files": ["src/catalog/prices.ts"] }
   ],
@@ -31,7 +45,9 @@ is safe; it replaces the previous notes).
       "title": "Checkout may charge a price up to five minutes old",
       "why": "getPrice is the cached function from prices.ts. The PR says checkout uses the live price." }
   ],
-  "fileNotes": { "src/cart/checkout.ts": "One call changed; it decides what the customer pays." }
+  "fileNotes": {
+    "src/cart/checkout.ts": "**One call changed, and it decides what the customer pays.**\n- `getLivePrice` becomes the cached `getPrice`\n- nothing refreshes the cache when a price changes"
+  }
 }
 ```
 
@@ -59,6 +75,49 @@ Judge the change after you have read it, not from its title or size.
   everything above **low**, allowed on low.
 - Big is not heavy. A 900-line rename is **low**; a one-token change to a price
   is **critical**.
+
+## The page (what each field becomes)
+
+The reader sees, top to bottom: a **TL;DR** card (headline = `attention.whatHappened`,
+What = `whatItDoes`, Why = `why`, Attention, Size, Intent), the **Overview**
+(`points`), the **Shape of the change** (`shape`), **Where to look** (`items`),
+**Intent and evidence**, then the **walkthrough** (`chapters`, each file card led by
+its `fileNotes`). Everything is optional except `whatItDoes` and — when `pr-triage`
+runs you — `attention`; empty fields simply do not show.
+
+- `why` — the author's **own** reason, quoted verbatim (4+ characters, exact case)
+  from the description, an issue, a commit, or the spec. Pick the sentence that
+  says why, not what. Leave it out when no source gives a reason; the page then
+  quotes the description's first sentence, or shows UNKNOWN.
+- `points` — 3–5 short lines (max 6, 240 chars each) that together tell the whole
+  change. Link the **keyword**, not the whole line: `[checkout](src/cart/checkout.ts:41)`.
+  Every link target must be a file (optionally `:line`, new side) in the diff.
+- `shape` — 1–3 compact views of the code's **structure**, show-me style, each at
+  most 30 lines: `call-tree`, `schema`, `types`, `pseudocode`, `component-tree`,
+  `file-tree`, `contract`. Use `lang: "diff"` with `+`/`-` lines when an existing
+  shape changes; show the whole shape when most of it is new. Keep only the calls,
+  fields, and files the reader needs. Skip `shape` for a rename or a bump.
+- `chapters` — the walkthrough, in the order a reader should go: most important
+  first (the core change → the wiring → tests and config). Every non-noise file
+  once; a test with a paired code file follows it by itself. Each chapter gets a
+  one-line `description`. Up to 6 chapters; a small PR needs one or two.
+- `fileNotes` — per file: a **bold one-line takeaway**, then 2–5 `- ` bullets with
+  the specific changes, identifiers in backticks. A trivial file needs only the
+  takeaway. A paragraph of prose triggers a warning.
+
+## Writing: one person talking to another
+
+These rules apply to every field a reader sees. They are adapted from
+`visual-skills`' plain-language guide and HumanLayer's `show-me` (both MIT).
+
+- Start with the point. Put context after it.
+- One idea per sentence; aim for under 20 words.
+- Use the plainest accurate word. Name a technical term only when it helps, and
+  explain it in the same sentence.
+- Keep code names, paths, and quotes exact, in backticks.
+- No filler ("essentially", "it's worth noting", "simply"), no metaphors, no
+  closing summary of what the reader just read.
+- Show structure (a `shape` view, bullets) instead of describing it in prose.
 
 ## Reading the diff
 

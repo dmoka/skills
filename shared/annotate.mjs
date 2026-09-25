@@ -9,6 +9,10 @@
 // Tour notes:   { "attention": { "level": "critical|high|medium|low", "whatHappened": "...", "why": "...",
 //                                "file": "...", "line": 12, "code": "<fragment of that line>", "side": "new|old" },
 //                 "whatItDoes": "...",
+//                 "why": "<verbatim author words: the reason for the change>",
+//                 "points": ["short line with a [keyword](src/file.ts:12) link", ...],
+//                 "chapters": [{ "title": "...", "description": "...", "files": ["<path>", ...] }],
+//                 "shape": [{ "title": "...", "kind": "call-tree|schema|types|pseudocode|component-tree|file-tree|contract", "lang": "diff|text|ts|sql|...", "code": "..." }],
 //                 "claims": [{ "quote": "<verbatim from the PR text>", "file": "...", "line": 12, "code": "<fragment of that line>", "note": "..." }],
 //                 "items":  [{ "severity": "high|medium|low", "file": "...", "line": 12, "code": "<fragment of that line>", "side": "new|old",
 //                              "title": "...", "why": "..." }],
@@ -25,6 +29,7 @@ if (!reportPath || !notesPath) { console.error("usage: annotate.mjs <report.json
 const report = JSON.parse(readFileSync(reportPath, "utf8"));
 const notes = JSON.parse(readFileSync(notesPath, "utf8"));
 const errors = [];
+const warnings = []; // below the standard, but not wrong: printed, never blocking
 
 // What these reports must never say. They point attention; they do not judge.
 const VERDICT = /\b(LGTM|nothing to review|no need to review|safe to ignore|looks good|looks (?:safe|fine|correct|harmless)|(?:is|are|seems|seem) (?:safe|fine|harmless)|safe to merge|ready to merge|approve[ds]?|good to go|ship it|no issues|nothing to worry|exploitable|is secure|verified safe)\b/i;
@@ -138,7 +143,67 @@ if (report.kind === "triage") {
   }
   for (const [path, text] of Object.entries(notes.fileNotes ?? {})) {
     if (!files.has(path)) errors.push(`fileNotes: "${path}" is not in this diff`);
-    checkText(`fileNotes[${path}]`, text, { max: 300 });
+    checkText(`fileNotes[${path}]`, text, { max: 700 });
+    if (typeof text === "string" && text.length > 160 && !/\n\s*- /.test(text)) warnings.push(`fileNotes[${path}]: ${text.length} chars of prose — lead with a **bold takeaway**, then 2–5 "- " bullets`);
+  }
+
+  // Why: the author's own reason, quoted. Never the model's.
+  if (notes.why != null) {
+    if (!quoteOk(notes.why)) errors.push(`why: "${String(notes.why).slice(0, 60)}" is not a verbatim quote (4+ chars, exact case) from the author's text`);
+    if (String(notes.why).length > 400) errors.push("why: max 400 chars — quote the one sentence that gives the reason");
+  }
+
+  // Overview points: short lines; every [keyword](path[:line]) link must land in the diff.
+  const points = notes.points ?? [];
+  if (points.length > 6) errors.push(`points: ${points.length} points, max 6`);
+  for (const [i, pt] of points.entries()) {
+    checkText(`points[${i}]`, pt, { required: true, max: 240 });
+    for (const m of String(pt).matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)) {
+      const [, , target] = m;
+      const [path, line] = target.split(/:(\d+)$/);
+      if (!files.has(path)) errors.push(`points[${i}]: link target "${target}" is not a file in this diff`);
+      else if (line && !files.get(path).hunks.some((h) => h.lines.some((l) => l.n === Number(line) && l.t !== "del"))) errors.push(`points[${i}]: "${target}" is not a new-side line of this diff`);
+    }
+  }
+
+  // Chapters: the walkthrough, in the order a reader should go. Every
+  // non-noise file exactly once — except a test, which follows its code.
+  const pairOf = new Map();
+  for (const f of report.files) if (f.kind === "test") {
+    const src = report.files.filter((c) => c.kind !== "test" && c.kind !== "noise" && testsSource(stemOf(f.path), stemOf(c.path)))
+      .sort((a, b) => stemOf(b.path).length - stemOf(a.path).length)[0];
+    if (src) pairOf.set(f.path, src.path);
+  }
+  const chapters = notes.chapters ?? [];
+  if (chapters.length > 6) errors.push(`chapters: ${chapters.length} chapters, max 6`);
+  if (chapters.length) {
+    const placed = new Map();
+    for (const [i, c] of chapters.entries()) {
+      checkText(`chapters[${i}].title`, c.title, { required: true, max: 80 });
+      checkText(`chapters[${i}].description`, c.description, { max: 240 });
+      for (const p of c.files ?? []) {
+        if (!files.has(p)) errors.push(`chapters[${i}]: "${p}" is not in this diff`);
+        else if (files.get(p).kind === "noise") errors.push(`chapters[${i}]: "${p}" is noise — it stays in the collapsed noise section`);
+        else if (placed.has(p)) errors.push(`chapters[${i}]: "${p}" is already in chapter ${placed.get(p) + 1}`);
+        else placed.set(p, i);
+      }
+    }
+    for (const f of report.files) {
+      if (f.kind === "noise" || placed.has(f.path)) continue;
+      if (f.kind === "test" && pairOf.has(f.path)) continue; // follows its code
+      errors.push(`chapters: "${f.path}" is in no chapter — place every code file (and every test with no code file)`);
+    }
+  }
+
+  // Shape: 1–3 compact structural views, show-me style.
+  const SHAPES = ["call-tree", "schema", "types", "pseudocode", "component-tree", "file-tree", "contract"];
+  const shape = notes.shape ?? [];
+  if (shape.length > 3) errors.push(`shape: ${shape.length} views, max 3 — pick the ones that explain the change`);
+  for (const [i, v] of shape.entries()) {
+    checkText(`shape[${i}].title`, v.title, { required: true, max: 80 });
+    if (!SHAPES.includes(v.kind)) errors.push(`shape[${i}].kind: one of ${SHAPES.join(", ")}`);
+    if (typeof v.code !== "string" || !v.code.trim()) errors.push(`shape[${i}].code: missing`);
+    else if (v.code.split("\n").length > 30) errors.push(`shape[${i}].code: ${v.code.split("\n").length} lines, max 30 — show the shape, not the code`);
   }
 
   if (!errors.length) {
@@ -150,6 +215,19 @@ if (report.kind === "triage") {
       ...(notes.items ?? []).map((it) => ({ source: "model", kind: "look-here", severity: it.severity, file: it.file, line: it.line, side: it.side ?? "new", text: it.title, why: it.why })),
     ];
     report.fileNotes = notes.fileNotes ?? {};
+    report.why = notes.why ?? null;
+    report.points = points;
+    report.shape = shape.map((v) => ({ title: v.title, kind: v.kind, lang: v.lang ?? "text", code: v.code }));
+    // Chapters with each unlisted test placed right after its code.
+    report.chapters = chapters.map((c) => {
+      const out = [];
+      for (const p of c.files) {
+        if (out.includes(p)) continue;
+        out.push(p);
+        for (const [t, src] of pairOf) if (src === p && !chapters.some((x) => x.files.includes(t))) out.push(t);
+      }
+      return { title: c.title, description: c.description ?? null, files: out };
+    });
     report.explains = (notes.explains ?? []).map((e) => ({ quote: e.quote, files: e.files }));
     // Derived, not written by the model: a test counts as explained when the
     // code it pairs with is explained.
@@ -175,6 +253,7 @@ if (report.kind === "triage") {
   errors.push(`unknown report kind "${report.kind}"`);
 }
 
+for (const w of warnings) console.error(`warn: ${w}`);
 if (errors.length) {
   console.error(`annotate: ${errors.length} problem(s), nothing written:\n` + errors.map((e) => "  - " + e).join("\n"));
   process.exit(1);

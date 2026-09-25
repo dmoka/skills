@@ -76,12 +76,15 @@ its code's explanation), `unmatched[]` (derived: quotes with no file),
 `side`, `text`, `why`), `fileNotes`, `order[]` (`path`, `role`: `code` |
 `test` | `noise`, `pairedWith`, `why`), `orderRule`, and `files[]` (`path`,
 `oldPath`, `status`, `kind`, `noise`, `areas`, `additions`, `deletions`,
-`hunks[]` with `lines[]` of `{ t: "add"|"del"|"ctx", s, o, n }`).
+`hunks[]` with `lines[]` of `{ t: "add"|"del"|"ctx", s, o, n }`), plus the
+model's `why`, `points[]`, `shape[]` (`title`, `kind`, `lang`, `code`) and
+`chapters[]` (`title`, `description`, `files`, tests placed after their code).
 
 ## In CI
 
 The deterministic half needs no model: `triage.mjs` (or `tour.mjs`), then
 `render.mjs`, gives the queue and every tour with facts, noise, and reading
 order — attention shows "not judged" and the WHY panel "not annotated yet".
-Upload the `.pr-review/` folder as one build artifact; the pages link to
-each other. Add the model step only where an agent runs in the pipeline.
+Upload `.pr-review/review.html` as the build artifact: one file with the
+queue and every tour. Add the model step only where an agent runs in the
+pipeline.

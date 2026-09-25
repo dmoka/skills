@@ -49,8 +49,11 @@ Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
      much attention the PR needs (`critical` / `high` / `medium` / `low`),
      what happened, why, and the line that drives it. Shown as a badge at
      the top of the tour.
-   - `whatItDoes` — two or three sentences on what the diff actually does,
+   - `whatItDoes` — one or two sentences on what the diff actually does,
      shown as the model's reading, never as the author's intent.
+   - `why`, `points`, `shape`, `chapters` — the author's reason (quoted),
+     a 3–5 line overview with keyword links, 1–3 structure views, and the
+     walkthrough grouped into chapters. All optional; see the reference.
    - `explains` — **the intent map**: each thing the author says the PR
      does, quoted verbatim, with the code files that implement it. Leave out
      a file nothing explains — the gate lists it as ASK WHY, and that list is
@@ -61,7 +64,7 @@ Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
      `file`, `line`, a verbatim `code` fragment of that line, `title`, `why`.
      Phrase each as what to check, never as a conclusion. Skip what CI
      already catches.
-   - `fileNotes` — one line per non-noise file: what to look at in it.
+   - `fileNotes` — per non-noise file: a **bold takeaway**, then 2–5 bullets.
 4. **Gate.** `node scripts/annotate.mjs <tour.json> <notes.json>`. It
    rejects a quote that is not verbatim in the author's text, a pointer whose
    line does not contain its `code`, a noise file in the intent map, more
@@ -69,7 +72,8 @@ Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
    and the unmatched quotes, and recomputes the reading order. Fix the notes,
    never the check; rerunning is safe.
 5. **Render.** `node scripts/render.mjs <tour.json>` writes the `.html` next
-   to it: one file, no server, safe to publish as a CI artifact. Look at it
+   to it: one file with the viewer and the data inside, no server, safe to
+   publish as a CI artifact. Look at it
    before you report — in a browser if you have one (serve the folder with
    `python3 -m http.server -d .pr-review` when `file://` is blocked), or at least confirm
    the WHY panel text in the JSON reads right.
