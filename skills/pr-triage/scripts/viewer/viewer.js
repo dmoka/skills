@@ -145,7 +145,7 @@
     const rows = prs.map((p, i) => {
       const a = p.attention;
       const has = !!DATA.tours?.[p.number];
-      return `<tr>
+      return `<tr${has ? ` class="qrow" tabindex="0" data-href="#/pr/${p.number}" aria-label="Open the tour of #${p.number}"` : ""}>
   <td class="rank r">${p.rank ?? i + 1}</td>
   <td>${att(a?.level)}</td>
   <td>
@@ -155,7 +155,7 @@
   </td>
   <td class="r num">${fmt(p.readLines)}<div style="color:var(--dim);white-space:nowrap">${p.noiseLines ? `+${fmt(p.noiseLines)} noise` : plural(p.filesChanged, "file")}</div></td>
   <td class="r num">${age(p.ageDays)}</td>
-  <td class="r">${has ? `<a class="go" href="#/pr/${p.number}">Tour →</a>` : ""}</td>
+  <td class="r">${has ? `<a class="go go-tour" href="#/pr/${p.number}">Tour →</a>` : ""}</td>
 </tr>`;
     }).join("");
     const overlaps = (t.overlaps ?? []).length ? `
@@ -383,6 +383,11 @@ ${overlaps}
       menu.onclick = () => { side.classList.toggle("is-open"); overlay.classList.toggle("is-open"); };
       overlay.onclick = close;
       side.querySelectorAll("a").forEach((x) => x.addEventListener("click", () => { if (innerWidth <= 900) close(); }));
+    }
+    // A queue row opens its tour; links inside the row keep their own target.
+    for (const row of app.querySelectorAll("tr.qrow")) {
+      row.addEventListener("click", (e) => { if (!e.target.closest("a") && !getSelection().toString()) location.hash = row.dataset.href.slice(1); });
+      row.addEventListener("keydown", (e) => { if (e.key === "Enter") location.hash = row.dataset.href.slice(1); });
     }
     // Change-map nodes open their file.
     for (const box of app.querySelectorAll(".cmap[data-links]")) {

@@ -242,3 +242,12 @@ details.codefold[open]>summary{border-bottom-color:var(--border)}
 .cmap svg g{transition:opacity .15s}.cmap svg g[style*="pointer"]:hover{opacity:.8}
 .dgm svg{--bg:var(--card)!important;background:transparent!important}
 .dgm svg text{font-family:var(--sans)!important}
+
+/* queue rows open their tour */
+tr.qrow{cursor:pointer}
+tr.qrow:hover td{background:oklch(1 0 0 / 0.045)}
+tr.qrow:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+tr.qrow:hover .title>a:first-child{text-decoration:underline;text-decoration-color:var(--dim);text-underline-offset:3px}
+.go-tour{color:var(--green);background:var(--green-bg);border-color:oklch(0.76 0.15 152 / 0.35);font-weight:500}
+.go-tour:hover{background:oklch(0.76 0.15 152 / 0.2)}
+tr.qrow:hover .go-tour{background:oklch(0.76 0.15 152 / 0.2)}
