@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseJsonc, globToRegex, matchAny, parseDiff, classify, computeFacts, prFacts, evalRule, readingOrder, stemOf } from "../shared/lib.mjs";
+import { parseJsonc, globToRegex, matchAny, parseDiff, classify, computeFacts, readingOrder, stemOf } from "../shared/lib.mjs";
 
 const diff = (path, body, header = "") => `diff --git a/${path} b/${path}\n${header}--- a/${path}\n+++ b/${path}\n${body}`;
 const files = (text, cfg) => parseDiff(text).map((f) => ((f.meta = classify(f, cfg)), f));
@@ -32,12 +32,6 @@ test("a removed assertion points at the removed line, old side", () => {
   const fs = files(diff("tests/a.test.ts", "@@ -210,4 +210,3 @@\n   it('x', () => {\n     run();\n-    expect(after.id).toMatch(/re_/);\n   });\n"));
   const [f] = computeFacts(fs, null).filter((x) => x.kind === "assertions-removed");
   assert.deepEqual([f.line, f.side], [212, "old"]);
-});
-
-test("rule evidence names the files behind a fact condition", () => {
-  const fs = files(diff("src/a.ts", "@@ -1 +1 @@\n-a\n+b\n"));
-  const f = prFacts({ additions: 1, deletions: 1, createdAt: new Date().toISOString(), labels: [] }, fs, null);
-  assert.deepEqual(evalRule({ when: { srcWithoutTests: true } }, f), ["src/a.ts"]);
 });
 
 test("stem pairs tests with sources", () => {
@@ -95,18 +89,6 @@ test("facts: untested source is low, medium inside a configured area", () => {
   assert.deepEqual(u.map((f) => [f.file, f.severity]), [["src/domain/refund.ts", "medium"], ["src/lib/x.ts", "low"]]);
 });
 
-test("rules: all conditions must hold, evidence is returned", () => {
-  const cfg = { areas: { money: ["src/domain/**"] } };
-  const fs = files(diff("src/domain/refund.ts", "@@ -1 +1 @@\n-a\n+b\n"), cfg);
-  const pr = { additions: 500, deletions: 10, changedFiles: 1, createdAt: new Date(Date.now() - 5 * 864e5).toISOString(), labels: [], author: { login: "x" } };
-  const f = prFacts(pr, fs, cfg);
-  assert.deepEqual(evalRule({ when: { areas: ["money"] } }, f), ["area money"]);
-  assert.ok(evalRule({ when: { linesChangedAll: { gt: 400 }, ageDays: { gte: 5 } } }, f));
-  assert.equal(evalRule({ when: { linesChangedAll: { gt: 400 }, draft: true } }, f), null);
-  assert.ok(evalRule({ when: { onlyPaths: ["src/**"] } }, f));
-  assert.ok(evalRule({ when: { srcWithoutTests: true } }, f));
-});
-
 test("reading order: hotspot first, test after its code, noise last", () => {
   const fs = files(
     diff("package-lock.json", "@@ -1 +1 @@\n-a\n+b\n") +
@@ -156,9 +138,3 @@ test("intent: informative titles, issue refs, status by strongest source", async
   assert.equal(intentStatus([{ type: "spec", text: "x" }]), "spec");
 });
 
-test("linesChanged counts only what a human reads", () => {
-  const fs = files(diff("package-lock.json", "@@ -1,2 +1,2 @@\n-a\n-b\n+c\n+d\n") + diff("src/a.ts", "@@ -1 +1 @@\n-x\n+y\n"));
-  const f = prFacts({ additions: 3, deletions: 3, createdAt: new Date().toISOString(), labels: [] }, fs, null);
-  assert.equal(f.linesChanged, 2);
-  assert.equal(f.linesChangedAll, 6);
-});

@@ -145,3 +145,31 @@ test("a test left unexplained with its code gets no second ASK WHY item", () => 
   assert.deepEqual(out.unexplained, ["src/domain/booking.ts", "tests/domain/booking.test.ts"]);
   assert.deepEqual(out.items.filter((i) => i.source === "map").map((i) => i.file), ["src/domain/booking.ts"]);
 });
+
+test("attention: a level above low needs a checked line; verdicts refused", () => {
+  const r = tour();
+  const at = { level: "critical", whatHappened: "Refund payout subtracts the fee twice.", why: "Every full refund pays the customer less than it should.", file: "src/domain/refund.ts", line: 11, code: "fee - fee" };
+  assert.equal(annotate(r, { ...good, attention: at }).ok, true);
+  assert.equal(JSON.parse(readFileSync(r, "utf8")).attention.level, "critical");
+  assert.match(annotate(r, { ...good, attention: { ...at, file: undefined } }).err, /needs "file", "line" and "code"/);
+  assert.match(annotate(r, { ...good, attention: { ...at, level: "urgent" } }).err, /must be one of/);
+  assert.match(annotate(r, { ...good, attention: { ...at, why: "Looks good otherwise." } }).err, /never gives a verdict/);
+  assert.equal(annotate(r, { ...good, attention: { level: "low", whatHappened: "Tiny tweak.", why: "Contained to one line." } }).ok, true);
+});
+
+test("triage order: complete, judged, and never a lower level above a higher one", () => {
+  const q = join(dir, "q");
+  execFileSync("mkdir", ["-p", q]);
+  const mk = (n, level) => writeFileSync(join(q, `tour-${n}.json`), JSON.stringify({ kind: "tour", attention: level && { level, whatHappened: "x", why: "y" } }));
+  mk(1, "low"); mk(2, "critical"); mk(3, null);
+  const triage = join(q, "triage.json");
+  writeFileSync(triage, JSON.stringify({ kind: "triage", prs: [1, 2, 3].map((n) => ({ number: n, tour: `tour-${n}.json` })) }));
+  const run = (notes) => annotate(triage, notes);
+  assert.match(run({ order: [2, 1] }).err, /#3 is missing/);
+  assert.match(run({ order: [2, 1, 3] }).err, /#3: tour-3.json has no attention yet/);
+  mk(3, "high");
+  assert.match(run({ order: [1, 2, 3] }).err, /#2 is "critical" but sits below a "low" PR/);
+  assert.equal(run({ order: [2, 3, 1], summary: "Two need attention." }).ok, true);
+  const out = JSON.parse(readFileSync(triage, "utf8"));
+  assert.deepEqual(out.prs.map((p) => [p.number, p.rank, p.attention.level]), [[2, 1, "critical"], [3, 2, "high"], [1, 3, "low"]]);
+});

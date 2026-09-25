@@ -7,7 +7,8 @@
 //
 //   node render.mjs <report.json> [--out report.html]
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { parseArgs } from "./lib.mjs";
 
 const args = parseArgs(process.argv.slice(2));
@@ -149,6 +150,17 @@ td.r,th.r{text-align:right}
 .score.medium{color:var(--amber);background:var(--amber-bg);border-color:oklch(0.8 0.14 75 / 0.28)}
 .score.low{color:var(--fg)}.score.none{color:var(--dim)}
 .plus{color:var(--green)}.minus{color:var(--red)}
+.att{display:inline-flex;align-items:center;justify-content:center;min-width:64px;height:20px;padding:0 8px;border-radius:5px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;border:1px solid var(--border2);white-space:nowrap}
+.att-critical{color:var(--bg);background:var(--red);border-color:var(--red)}
+.att-high{color:var(--red);background:var(--red-bg);border-color:oklch(0.704 0.191 22.2 / 0.35)}
+.att-medium{color:var(--amber);background:var(--amber-bg);border-color:oklch(0.8 0.14 75 / 0.3)}
+.att-low{color:var(--mfg)}.att-none{color:var(--dim);font-weight:400;text-transform:none;letter-spacing:0}
+.what{margin-top:5px;max-width:70ch;color:var(--fg)}
+.whyline{margin-top:3px;color:var(--mfg);max-width:74ch;font-size:12.5px}
+.whyline .ev,.facts a{text-decoration:none}.whyline .ev{color:var(--blue);font-size:11.5px}
+.go{font-size:12px;color:var(--fg);white-space:nowrap;border:1px solid var(--border2);border-radius:5px;padding:3px 8px}.go:hover{background:var(--faint);text-decoration:none}
+.attbox{margin-top:18px;display:flex;gap:12px;align-items:flex-start;padding:12px 14px}
+.attbox .t{flex:1}.attbox .t div{color:var(--mfg);font-size:12.5px;margin-top:2px}
 .rank{color:var(--dim);font-family:var(--mono);font-variant-numeric:tabular-nums}
 .title{font-weight:500}.title .n{color:var(--dim);font-family:var(--mono);font-weight:400;margin-left:6px;font-size:12px}
 .expl{color:var(--mfg);margin-top:3px;max-width:62ch}
@@ -218,7 +230,7 @@ details>summary .caret{display:inline-block;transition:transform .15s;color:var(
 @media (max-width:820px){.why{grid-template-columns:1fr}.why>section:nth-child(even){border-left:0}.why>section:nth-child(2){border-top:1px solid var(--border)}.hide-sm{display:none}.item{grid-template-columns:1fr}.ann-box{margin-left:12px}.file.test{margin-left:8px}.wrap{padding:0 16px 48px}}
 `;
 
-function page(title, topRight, body) {
+function page(title, topRight, body, meta) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>
@@ -229,74 +241,68 @@ function page(title, topRight, body) {
 <body>
 <header class="top"><div class="wrap">${topRight}</div></header>
 <main class="wrap">${body}</main>
-<script type="application/json" id="report">${JSON.stringify({ kind: report.kind, schemaVersion: report.schemaVersion, source: input.split("/").pop() }).replace(/</g, "\\u003c")}</script>
+<script type="application/json" id="report">${JSON.stringify(meta).replace(/</g, "\\u003c")}</script>
 </body></html>
 `;
 }
 
 // ---------- triage ----------
 
-function renderTriage(r) {
+const LEVELS = ["critical", "high", "medium", "low"];
+const attBadge = (lvl) => (lvl ? `<span class="att att-${esc(lvl)}">${esc(lvl)}</span>` : `<span class="att att-none">not judged</span>`);
+
+function renderTriage(r, tours) {
   const prs = r.prs;
-  const max = Math.max(1, ...prs.map((p) => p.score));
-  const band = (s) => (s <= 0 ? "none" : s >= max * 0.6 ? "high" : s >= max * 0.3 ? "medium" : "low");
-  const fired = r.config.rules.filter((x) => x.matchedPRs.length).length;
-  const ages = prs.map((p) => p.ageDays).sort((a, b) => a - b);
-  const medianAge = ages.length ? ages[Math.floor(ages.length / 2)] : 0;
+  const judged = prs.filter((p) => p.attention).length;
+  const count = (lvl) => prs.filter((p) => p.attention?.level === lvl).length;
   const top = `<span class="mark"><i></i>PR Triage</span><span class="sep">/</span><span class="mono meta">${esc(r.repo)}</span><span class="grow"></span><span class="meta hide-sm">${esc(when(r.generatedAt))}</span>`;
+  const anchorIn = (p, file, line, side) => {
+    const t = tours.get(p.number);
+    const i = t?.order.findIndex((o) => o.path === file);
+    if (i == null || i < 0) return `tour-${p.number}.html`;
+    return `tour-${p.number}.html#f${i}${line != null ? (side === "old" ? "-o" : "-n") + line : ""}`;
+  };
 
-  const rows = prs.map((p) => `
+  const rows = prs.map((p, i) => {
+    const a = p.attention;
+    const hasTour = tours.has(p.number);
+    return `
 <tr>
-  <td class="rank r">${p.rank}</td>
-  <td><span class="score ${band(p.score)}">${p.score}</span></td>
+  <td class="rank r">${p.rank ?? i + 1}</td>
+  <td>${attBadge(a?.level)}</td>
   <td>
-    <div class="title"><a href="${esc(p.url)}">${esc(p.title)}</a><span class="n">#${p.number}</span><span class="n" style="font-family:var(--sans)">${esc(p.author ?? "")}</span>${p.draft ? ` <span class="pill">draft</span>` : ""}${p.labels.map((l) => ` <span class="pill">${esc(l)}</span>`).join("")}</div>
-    ${p.explanation ? `<div class="expl model">${md(p.explanation)}</div>` : ""}
-    ${p.facts.length ? `<div class="facts">${p.facts.map((f) => `<div>${md(f.text)} <span class="mono" style="color:var(--dim)">${esc(f.file)}${f.line ? ":" + f.line : ""}</span></div>`).join("")}</div>` : ""}
+    <div class="title"><a href="${hasTour ? `tour-${p.number}.html` : esc(p.url)}">${esc(p.title)}</a><a class="n" href="${esc(p.url)}">#${p.number}</a><span class="n" style="font-family:var(--sans)">${esc(p.author ?? "")}</span>${p.draft ? ` <span class="pill">draft</span>` : ""}${p.labels.map((l) => ` <span class="pill">${esc(l)}</span>`).join("")}</div>
+    ${a ? `<div class="model what">${md(a.whatHappened)}</div><div class="whyline">${md(a.why)}${a.file ? ` <a class="mono ev" href="${anchorIn(p, a.file, a.line, a.side)}">${esc(a.file.split("/").pop())}${a.line != null ? ":" + a.line : ""}</a>` : ""}</div>` : ""}
+    ${p.highFacts.length ? `<div class="facts">${p.highFacts.slice(0, 3).map((f) => `<div>${md(f.text)} <a class="mono" style="color:var(--dim)" href="${anchorIn(p, f.file, f.line, f.side)}">${esc(f.file.split("/").pop())}${f.line ? ":" + f.line : ""}</a></div>`).join("")}</div>` : ""}
   </td>
-  <td>
-    <div class="chips">${p.matched.length ? p.matched.map((m) => `<span class="chip${m.points < 0 ? " neg" : ""}" title="${esc(m.why)}${m.evidence.length ? " — " + esc(m.evidence.join("; ")) : ""}">${esc(m.id)} <span class="p">${m.points > 0 ? "+" : ""}${m.points}</span></span>`).join("") : `<span class="empty">no rule matched</span>`}</div>
-    ${p.matched.length ? `<div class="ev">${p.score} = ${p.matched.map((m) => `${esc(m.id)} ${m.points}`).join(" + ").replace(/\+ -/g, "− ")}</div>` : ""}
-  </td>
-  <td class="r num"><span class="plus">+${p.additions}</span> <span class="minus">−${p.deletions}</span><div style="color:var(--dim);white-space:nowrap">${plural(p.filesChanged, "file")}${p.noiseFiles ? ` · ${p.noiseFiles} noise` : ""}</div></td>
+  <td class="r num">${p.readLines.toLocaleString("en")}<div style="color:var(--dim);white-space:nowrap">${p.noiseLines ? `+${p.noiseLines.toLocaleString("en")} noise` : plural(p.filesChanged, "file")}</div></td>
   <td class="r num">${age(p.ageDays)}</td>
-</tr>`).join("");
-
-  const ruleRows = r.config.rules.map((x) => `
-<tr>
-  <td class="mono">${esc(x.id)}</td>
-  <td>${esc(x.why)}</td>
-  <td class="rule-when">${esc(JSON.stringify(x.when)).replace(/&quot;/g, "")}</td>
-  <td class="r"><span class="num ${x.points < 0 ? "plus" : ""}">${x.points > 0 ? "+" : ""}${x.points}</span></td>
-  <td class="mono" style="color:${x.matchedPRs.length ? "var(--fg)" : "var(--dim)"}">${x.matchedPRs.length ? x.matchedPRs.map((n) => "#" + n).join(" ") : "—"}</td>
-</tr>`).join("");
+  <td class="r">${hasTour ? `<a class="go" href="tour-${p.number}.html">Tour →</a>` : `<span class="empty mono" title="Ask your agent">tour PR ${p.number}</span>`}</td>
+</tr>`;
+  }).join("");
 
   const body = `
-<h1>Review queue, ranked by your rules</h1>
-<div class="sub"><span>Ranked by <span class="mono">${esc(r.config.path)}</span></span><span class="sep">·</span><span class="mono">sha ${esc(r.config.sha256)}</span><span class="sep">·</span><span>${esc(r.scoring)}</span></div>
+<h1>What needs your attention first</h1>
+<div class="sub"><span>${judged === prs.length ? "Every open PR was read and judged by the model; each reason links to the line that drives it." : `${judged} of ${prs.length} PRs judged so far — the rest are listed by number.`}</span></div>
 <div class="box strip">
   <div><div class="k">Open PRs</div><div class="v">${prs.length}<small>${prs.filter((p) => p.draft).length} draft</small></div></div>
-  <div><div class="k">With a high-severity fact</div><div class="v">${prs.filter((p) => p.facts.length).length}</div></div>
-  <div><div class="k">Rules that fired</div><div class="v">${fired}<small>of ${r.config.rules.length}</small></div></div>
-  <div><div class="k">Median age</div><div class="v">${medianAge}<small>days</small></div></div>
-  <div><div class="k">Lines waiting</div><div class="v">${prs.reduce((s, p) => s + p.additions + p.deletions, 0).toLocaleString("en")}</div></div>
+  <div><div class="k">Critical</div><div class="v" style="color:${count("critical") ? "var(--red)" : "inherit"}">${count("critical")}</div></div>
+  <div><div class="k">High</div><div class="v" style="color:${count("high") ? "var(--red)" : "inherit"}">${count("high")}</div></div>
+  <div><div class="k">Lines to read</div><div class="v">${prs.reduce((s, p) => s + p.readLines, 0).toLocaleString("en")}</div></div>
+  <div><div class="k">Noise, collapsed</div><div class="v">${prs.reduce((s, p) => s + p.noiseLines, 0).toLocaleString("en")}<small>lines</small></div></div>
 </div>
 ${r.summary ? `<h2>Summary <span class="tag tag-model">MODEL</span></h2><div class="model">${md(r.summary)}</div>` : ""}
-<h2>Queue <span class="count">${prs.length}</span></h2>
+<h2>Queue <span class="count">${prs.length} · most attention first</span></h2>
 <div class="box"><table>
-<thead><tr><th class="r">#</th><th>Score</th><th>Pull request</th><th>Why this rank</th><th class="r">Size</th><th class="r">Age</th></tr></thead>
+<thead><tr><th class="r">#</th><th>Attention</th><th>Pull request · what happened · why</th><th class="r">To read</th><th class="r">Age</th><th></th></tr></thead>
 <tbody>${rows}</tbody></table></div>
-<h2>The rule <span class="count">edit ${esc(r.config.path)} to change the ranking</span></h2>
-<div class="box"><table>
-<thead><tr><th>Rule</th><th>Why</th><th>When (all must hold)</th><th class="r">Points</th><th>Fired on</th></tr></thead>
-<tbody>${ruleRows}</tbody></table></div>
-<div class="footer"><span>Scores are computed by a script from <span class="mono">gh</span> data and your config. The model wrote only the lines marked in blue.</span><span>A rank is an order to read in, not a verdict on any PR.</span></div>`;
-  return page(`Triage · ${r.repo}`, top, body);
+<div class="footer"><span>Attention is the model's judgement after reading each PR. Blue text is the model's; red dots are facts a script computed from the diff.</span><span>An order to read in — never a verdict. The last PR still gets read.</span></div>`;
+  return page(`Triage · ${r.repo}`, top, body, { kind: "triage", schemaVersion: r.schemaVersion });
 }
 
 // ---------- tour ----------
 
-function renderTour(r) {
+function renderTour(r, { back = false } = {}) {
   const files = new Map(r.files.map((f) => [f.path, f]));
   const idx = new Map(r.order.map((o, i) => [o.path, i]));
   const anchor = (path, line, side = "new") => `#f${idx.get(path)}${line != null ? (side === "old" ? "-o" : "-n") + line : ""}`;
@@ -304,7 +310,7 @@ function renderTour(r) {
   const SRC = { model: 0, map: 1, fact: 2 };
   const items = [...r.items].sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.severity] - { high: 0, medium: 1, low: 2 }[b.severity]) || SRC[a.source] - SRC[b.source]);
   const pr = r.pr;
-  const top = `<span class="mark"><i></i>PR Tour</span><span class="sep">/</span><span class="mono meta">${esc(r.repo ?? "local diff")}</span><span class="sep">/</span><span class="mono">#${esc(pr.number)}</span><span class="grow"></span><span class="meta hide-sm">${esc(when(r.generatedAt))}</span>`;
+  const top = `${back ? `<a class="go" href="triage.html">← Queue</a>` : ""}<span class="mark"><i></i>PR Tour</span><span class="sep">/</span><span class="mono meta">${esc(r.repo ?? "local diff")}</span><span class="sep">/</span><span class="mono">#${esc(pr.number)}</span><span class="grow"></span><span class="meta hide-sm">${esc(when(r.generatedAt))}</span>`;
 
   const TYPE = { spec: "SPEC", description: "DESCRIPTION", issue: "ISSUE", commits: "COMMITS", title: "TITLE" };
   const srcBlock = (x) => {
@@ -360,6 +366,7 @@ ${noise.map((o) => { const f = files.get(o.path); return `<details class="row" i
   const body = `
 <h1>${esc(pr.title)}</h1>
 <div class="sub">${pr.url ? `<a class="mono" href="${esc(pr.url)}">#${esc(pr.number)}</a>` : ""}${pr.author ? `<span>${esc(pr.author)}</span>` : ""}${pr.base ? `<span class="mono">${esc(pr.base)} ← ${esc(pr.head)}</span>` : ""}${pr.draft ? `<span class="pill">draft</span>` : ""}<span class="num"><span class="plus">+${pr.additions}</span> <span class="minus">−${pr.deletions}</span></span><span>${plural(pr.filesChanged, "file")}</span></div>
+${r.attention ? `<div class="box attbox">${attBadge(r.attention.level)}<div class="t"><b>${md(r.attention.whatHappened)}</b><div>${md(r.attention.why)}${r.attention.file ? ` <a class="mono" style="color:var(--blue)" href="${anchor(r.attention.file, r.attention.line, r.attention.side)}">${esc(r.attention.file.split("/").pop())}${r.attention.line != null ? ":" + r.attention.line : ""}</a>` : ""}</div></div><span class="tag tag-model">MODEL</span></div>` : ""}
 <div class="box strip">
   <div><div class="k">Read</div><div class="v">${readLines.toLocaleString("en")}<small>lines in ${plural(nonNoise.length, "file")}</small></div></div>
   <div><div class="k">Collapsed noise</div><div class="v">${noiseLines.toLocaleString("en")}<small>lines in ${plural(noise.length, "file")}</small></div></div>
@@ -380,7 +387,7 @@ ${noise.map((o) => { const f = files.get(o.path); return `<details class="row" i
 ${fileBlocks}
 ${noise.length ? `<h2>Collapsed</h2>${noiseBlock}` : ""}
 <div class="footer"><span>This tour points attention. It gives no merge verdict and no security verdict.</span><span>Collapsed means low reading value, not verified.</span><span>Blue = written by the model.</span></div>`;
-  return page(`Tour #${pr.number} · ${pr.title}`, top, body);
+  return page(`Tour #${pr.number} · ${pr.title}`, top, body, { kind: "tour", schemaVersion: r.schemaVersion, pr: pr.number });
 }
 
 function fileBlock(r, o, f, i, items) {
@@ -420,9 +427,20 @@ function diffTable(f, i, items, foldAt) {
 
 // ---------- main ----------
 
-let html;
-if (report.kind === "triage") html = renderTriage(report);
-else if (report.kind === "tour") html = renderTour(report);
-else { console.error(`unknown report kind "${report.kind}"`); process.exit(1); }
-writeFileSync(outPath, html);
-console.log(outPath);
+const dir = dirname(input);
+if (report.kind === "triage") {
+  // One call renders the queue and every tour it lists, so the links work.
+  const tours = new Map();
+  for (const p of report.prs) {
+    const path = join(dir, p.tour);
+    if (!existsSync(path)) continue;
+    const t = JSON.parse(readFileSync(path, "utf8"));
+    tours.set(p.number, t);
+    writeFileSync(path.replace(/\.json$/, ".html"), renderTour(t, { back: true }));
+  }
+  writeFileSync(outPath, renderTriage(report, tours));
+  console.log(`${outPath} (+ ${tours.size} tours)`);
+} else if (report.kind === "tour") {
+  writeFileSync(outPath, renderTour(report, { back: existsSync(join(dir, "triage.json")) }));
+  console.log(outPath);
+} else { console.error(`unknown report kind "${report.kind}"`); process.exit(1); }

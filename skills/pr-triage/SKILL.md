@@ -1,96 +1,95 @@
 ---
 name: pr-triage
-description: Rank a repo's open pull request queue by risk rules the user writes and can read — touched areas (money, auth, migrations), skipped tests, untested changes, size, age — and render the ranked queue as one self-contained HTML page plus JSON for agents. Use when the user asks which PR to review first, has too many open PRs, wants a review queue ordered, or mentions PR triage, review backlog, or review priority.
+description: Read every open pull request in a repo, judge how much of a reviewer's attention each one needs (critical, high, medium, low) from what the change actually does, and order the queue most-attention-first — each judgement pointing at the line that drives it, each PR linked to a full reading tour. Renders one self-contained HTML queue plus JSON for agents. Use when the user asks which PR to review first, what needs attention in the PR queue, has too many open PRs, or mentions PR triage, review backlog, or review priority.
 ---
 
 # PR triage
 
-"Which PR should I review first?" has no answer a model can know. Priority
-lives in the team: which folder moves money in this repo, which migrations
-hurt, how long a PR may wait. So this skill does not guess priority. The user
-writes the rule in `.github/pr-review.jsonc`, a script applies it to facts
-pulled with `gh`, and the rule that produced every rank is printed next to
-the PR. The model only explains.
+A review queue sorted by age or size sends people to the wrong PR first. A
+900-line rename is harmless; a one-token change to a price is not. This skill
+reads every open PR, decides how heavy each change really is, and orders the
+queue so the PRs that need real attention come first. Nobody configures
+anything.
+
+It points attention; it never approves. The last PR in the queue still gets
+read. Every judgement names the line that drives it, and every PR links to a
+reading tour built from the same data, so a reviewer can check the judgement
+in one click.
 
 Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
 `gh` logged in). If you fetched this over HTTP, fetch `scripts/*.mjs` and
-[references/config.md](references/config.md) as raw text with `curl -sSL`,
-never through a summarizing fetch tool.
+the files in `references/` as raw text with `curl -sSL`.
 
 ## The loop
 
 1. **Check the ground.** Inside a git repo with a GitHub remote, `gh auth
    status` green. Otherwise report BLOCKED with the exact failing command.
-2. **Config.** If `.github/pr-review.jsonc` is missing, draft one from the
-   starter in [references/config.md](references/config.md) into
-   `.pr-review/proposed-config.jsonc` — not into `.github/` yet. Fill `areas`
-   with this repo's real paths: read the README and the tree, find where
-   money is computed, where access is checked, where migrations live. In a
-   repo with no login, every route and server action is a public endpoint —
-   put them in `auth`. You may add rules beyond the starter. Show the draft
-   and say plainly: "these points are my proposal; the ranking is yours —
-   edit them." After the user confirms, move it to `.github/pr-review.jsonc`
-   (they commit it). If the config exists, never edit it without being asked.
-3. **Compute.** `node scripts/triage.mjs` (add `--repo owner/name` when not in
-   the repo; `--config <path>` and `--out <dir>` for a dry run of another
-   config). It writes `.pr-review/triage.json` — per PR: score, matched rules
-   with the files behind each, high facts, and the changed files — and prints
-   the ranking with the score arithmetic. Exit 2 means the config is missing
-   or has no rules. Rerunning it replaces the explanations, so explain after
-   the last compute.
-4. **Explain.** Read `triage.json`, and `gh pr diff <n>` wherever the
-   evidence is not enough to say why a rule fired or whether it fits. Write
-   `.pr-review/triage.notes.json`:
-   `{ "summary": "...", "prs": { "<number>": "one sentence" } }`. Each sentence
-   says why this PR sits where it sits, in reviewer language, from its
-   matched rules and facts: "Changes tax rounding and adds no test — the
-   money rule and the untested rule fired." Where a rule scores a PR in a way
-   the facts contradict (a 900-line PR that is all renames), say so — that is
-   a rule worth changing.
-5. **Gate.** `node scripts/annotate.mjs .pr-review/triage.json
-   .pr-review/triage.notes.json`. It refuses unknown PR numbers, overlong
-   text, and any verdict word. Fix the notes, never the check.
-6. **Render.** `node scripts/render.mjs .pr-review/triage.json` writes
-   `triage.html` next to it: one file, no server, safe to publish as a CI
-   artifact.
-7. **Report** in chat: the top five with their score arithmetic
-   (`85 = money 40 + skips-test 35 + stale 10`), rules that never fired,
-   and at most three proposed config changes, each with the PR that motivates
-   it and its effect from a dry run (`--config` a copy, `--out` a scratch
-   folder): "#8 moves 50 → 90, rank 4 → 2". Proposals only — the user edits
-   the rule. A gap the config cannot express goes under blind spots.
+2. **Compute.** `node scripts/triage.mjs` (add `--repo owner/name` outside
+   the repo). For every open PR it writes `.pr-review/tour-<n>.json` — files,
+   noise, FACT items, reading order, the author's words — and it writes
+   `.pr-review/triage.json` listing them. No model is involved. Rerunning
+   replaces everything, judgements included, so judge after the last run.
+   More than 20 open PRs: say how many, and ask before judging them all.
+3. **Judge each PR on its own.** For each `tour-<n>.json`, read that PR —
+   `gh pr diff <n>`, noise skimmed, surrounding code at the PR head
+   (`git fetch origin <head>` then `git show FETCH_HEAD:<path>`) — and write
+   `.pr-review/tour-<n>.notes.json` in the format of
+   [references/notes.md](references/notes.md), **with the `attention` block**.
+   Then `node scripts/annotate.mjs .pr-review/tour-<n>.json
+   .pr-review/tour-<n>.notes.json` and fix the notes until it passes.
+   **Use one fresh sub-agent per PR when you can**, in parallel, each given
+   only its PR number, this step, and the notes reference. A judge that has
+   read the other PRs grades on a curve. Without sub-agents, judge them one
+   by one and judge each on its own merits.
+4. **Order the queue.** Read every PR's `attention`. Write
+   `.pr-review/triage.notes.json`: `{ "summary": "...", "order": [7, 6, ...] }`
+   — most attention first, by level, then by your judgement within a level
+   (what breaks first, what blocks others). The summary is two or three
+   sentences on the queue as a whole, including conflicts between PRs.
+   `node scripts/annotate.mjs .pr-review/triage.json .pr-review/triage.notes.json`
+   checks every PR is placed once, judged, and never below a lower level.
+5. **Render.** `node scripts/render.mjs .pr-review/triage.json` writes
+   `triage.html` and every `tour-<n>.html`, linked both ways: one folder, no
+   server, safe to publish as a CI artifact. Look at the queue before you
+   report — in a browser if you have one (`python3 -m http.server -d
+   .pr-review` when `file://` is blocked), or at least confirm the JSON.
+6. **Report** in chat: the path to `triage.html`, then the queue — level,
+   PR, what happened, why — critical and high in full, the rest as one line
+   each.
 
 ## Hard rules
 
-- **The script ranks; you never do.** Do not reorder, re-score, or drop a PR
-  in the notes, the chat, or the HTML. Disagree with a rank? Propose a rule
-  change and show which PRs it would move.
-- **No verdicts.** A rank is an order to read in. Never call a PR "safe",
-  "LGTM", "fine", "ready to merge", or "nothing to review" — the
-  lowest-ranked PR still gets read. The gate refuses the common phrasings;
-  the rule covers the rest.
+- **Judge the change, not its size, title, or author.** Read the diff before
+  you judge. A title can hide a change; that is a reason for more attention.
+- **No verdicts.** Attention is an order to read in. Never call a PR "safe",
+  "LGTM", "fine", "ready to merge", or "nothing to review". The gate refuses
+  the common phrasings; the rule covers the rest.
+- **Every level above low points at a line**, with a verbatim code fragment
+  the gate checks. No line, no judgement.
 - **Read-only on GitHub.** Never comment, label, approve, request changes,
-  assign, or merge. Outputs live in `.pr-review/`, which `pr-tour` shares; if
-  neither `.gitignore` nor `.git/info/exclude` covers it, suggest adding it.
-- **Name the blind spots** (below) in the report whenever a rule depends on
-  one.
+  assign, or merge. Outputs live in `.pr-review/`; if neither `.gitignore`
+  nor `.git/info/exclude` covers it, suggest adding it.
 
 ## What the ranking cannot see
 
-- **Coverage.** `gh` has no coverage data. `srcWithoutTests` is an honest
-  proxy — "a source file changed and no test with its name changed" — not a
-  coverage delta. A real delta needs CI to publish coverage per PR.
-- **Business priority** outside the configured `areas`. A PR in an
-  unlisted folder that breaks checkout scores zero on the area rules.
-- **Intent.** Triage reads diffs and metadata, not descriptions. Whether a
-  PR does what it claims is `pr-tour`'s question, then a reviewer's.
-- **Age** counts from PR creation, not from the last push or review request.
+- **Whether the code works.** Nobody ran it. A judge reads; tests run.
+- **Everything a reader misses.** Models catch a minority of the issues a
+  careful human finds. A low level means "nothing stood out to a reader",
+  never "checked".
+- **Context outside the repo:** deadlines, who is waiting, what the business
+  cares about this week. Say so when it would change the order.
+- **Stability.** Two runs can place PRs within a level differently. The
+  levels themselves should not move; if they do, the evidence line says why.
 
 ## Done means
 
-- `.pr-review/triage.json` and `.pr-review/triage.html` exist and every PR
-  in them has an explanation that passed `annotate.mjs`.
-- The chat report shows the score arithmetic for the top five, the rules
-  that never fired, and any proposed config changes, clearly marked as
-  proposals.
+- `triage.json` passed `annotate.mjs`, and so did every tour's notes.
+- `triage.html` and one `tour-<n>.html` per open PR exist and link to each
+  other.
+- The chat report gives the queue with levels and reasons, most attention
+  first.
 - Nothing on GitHub changed.
+
+The intent map inside each tour, its search order for the author's intent,
+and the fresh-session rule are adapted from Matt Pocock's
+[`code-review`](https://github.com/mattpocock/skills) skill (MIT).

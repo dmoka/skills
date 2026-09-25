@@ -1,22 +1,20 @@
-# `.github/pr-review.jsonc` — the rule, written by you
+# `.github/pr-review.jsonc` — optional tuning
 
-One file configures both `pr-triage` and `pr-tour`. It is JSON with comments
-and trailing commas allowed. Commit it: the ranking is a team decision, and a
-diff to this file is a visible change to what the team reviews first.
-
-## Starter
-
-Replace every path with this repo's real ones. The points are a proposal.
+Neither skill needs this file. Without it, built-in defaults decide what is a
+test, what is noise, and the reading order, and the model judges attention on
+its own. Add the file only when the defaults get this repo wrong. It is JSON
+with comments and trailing commas allowed. Nothing in it ranks PRs.
 
 ```jsonc
 {
   "version": 1,
 
-  // Named parts of THIS repo. Both skills use them.
+  // Named parts of THIS repo. Shown as tags on files and given to the model
+  // as hints — a change in "money" is read with extra care. They never score.
   "areas": {
-    "money":      ["src/domain/refund.ts", "src/domain/fees.ts", "src/payments/**"],
-    "auth":       ["middleware.ts", "src/auth/**", "app/admin/**/actions.ts"],
-    "migrations": ["drizzle/**", "migrations/**"]
+    "money":      ["src/domain/refund.ts", "src/payments/**"],
+    "auth":       ["middleware.ts", "**/actions.ts"],
+    "migrations": ["drizzle/**"]
   },
 
   // Extra test globs (common layouts are built in).
@@ -25,72 +23,20 @@ Replace every path with this repo's real ones. The points are a proposal.
   // Extra noise globs (lockfiles, snapshots, dist/, *.min.* are built in).
   "noise": ["drizzle/meta/**"],
 
-  "triage": {
-    // score = sum of points of every rule whose conditions ALL hold.
-    // Highest score is reviewed first. Ties: the PR that waited longest.
-    "rules": [
-      { "id": "money",      "points": 40, "why": "touches money",
-        "when": { "areas": ["money"] } },
-      { "id": "auth",       "points": 35, "why": "touches authorization",
-        "when": { "areas": ["auth"] } },
-      { "id": "skips-test", "points": 35, "why": "adds a skipped or focused test",
-        "when": { "skippedTestsAdded": { "gt": 0 } } },
-      { "id": "migration",  "points": 30, "why": "changes the schema",
-        "when": { "areas": ["migrations"] } },
-      { "id": "drops-data", "points": 25, "why": "destructive SQL",
-        "when": { "destructiveSql": { "gt": 0 } } },
-      { "id": "untested",   "points": 20, "why": "source changed, no test changed",
-        "when": { "srcWithoutTests": true } },
-      { "id": "big",        "points": 15, "why": "over 400 changed lines",
-        "when": { "linesChanged": { "gt": 400 } } },
-      { "id": "stale",      "points": 10, "why": "waiting over 3 days",
-        "when": { "ageDays": { "gt": 3 } } },
-      { "id": "deps-only",  "points": -20, "why": "only dependency files changed",
-        "when": { "onlyPaths": ["package.json", "package-lock.json"] } },
-      { "id": "draft",      "points": -50, "why": "draft — not asking for review yet",
-        "when": { "draft": true } }
-    ]
-  },
-
   "tour": {
-    // Optional. Folders searched for a spec or review contract whose file
-    // name contains the branch name (feat/event-waitlist -> *event-waitlist*.md).
+    // Folders searched for a spec or review contract whose file name
+    // contains the branch name (feat/gift-cards -> *gift-cards*.md).
     "specDirs": ["docs", "specs", ".scratch", "contracts"],
-    // Optional. The order THIS team reads in; first match wins.
-    // Omit to use the built-in order below.
+    // The order THIS team reads in; first match wins.
     "readingOrder": [
       { "name": "schema & migrations", "paths": ["drizzle/**", "src/db/schema.ts"] },
       { "name": "domain",              "paths": ["src/domain/**"] },
-      { "name": "services & data",     "paths": ["src/services/**", "src/db/**", "src/payments/**"] },
+      { "name": "services & data",     "paths": ["src/services/**", "src/db/**"] },
       { "name": "UI",                  "paths": ["app/**", "components/**"] }
     ]
   }
 }
 ```
-
-## Conditions
-
-Every condition in a rule's `when` must hold. Numbers take a plain value or a
-comparator object: `{ "gt": 3 }`, `gte`, `lt`, `lte`, `eq` (combine them for a
-range: `{ "gte": 100, "lt": 400 }`).
-
-| Condition | Holds when | Type |
-|---|---|---|
-| `areas` | any non-noise file is in one of these named areas | `["money"]` |
-| `paths` | any changed file matches one of these globs | `["src/**"]` |
-| `onlyPaths` | every changed file matches one of these globs | `["docs/**"]` |
-| `linesChanged` | additions + deletions a human reads (noise excluded) | number |
-| `linesChangedAll` | all additions + deletions, noise included | number |
-| `filesChanged` | changed files | number |
-| `ageDays` | whole days since the PR was opened | number |
-| `draft` | the PR is a draft | boolean |
-| `labels` | the PR has any of these labels | `["dependencies"]` |
-| `author` | the PR author is one of these logins | `"bot"` or `[...]` |
-| `skippedTestsAdded` | added `.skip` / `xit` / `@Disabled` / `.only` lines… | number |
-| `srcWithoutTests` | a source file changed and no changed test shares its name | boolean |
-| `destructiveSql` | added `DROP`, `TRUNCATE`, `RENAME`, `DELETE FROM` lines in SQL or migration files | number |
-| `assertionsRemoved` | test files that remove more assertions than they add | number |
-| `addedLinesMatch` | a regex matches an added, non-noise line (case-insensitive) | `"process\\.env\\."` |
 
 Globs: `**` any depth, `*` within one folder, `?`, `{a,b}`. A glob without `/`
 matches the file name anywhere (`"*.sql"`).
@@ -112,29 +58,30 @@ matches the file name anywhere (`"*.sql"`).
 
 Both reports carry `kind` (`"triage"` or `"tour"`) and `schemaVersion: 1`.
 
-**triage.json** — `repo`, `generatedAt`, `config` (`path`, `sha256`, `rules`
-with `matchedPRs`), `scoring`, `summary` (model), and `prs[]`: `rank`,
-`score`, `number`, `title`, `url`, `author`, `draft`, `labels`, `ageDays`,
-`additions`, `deletions`, `filesChanged`, `noiseFiles`, `areas`, `matched[]`
-(`id`, `points`, `why`, `evidence`), `facts[]` (high-severity facts), and
-`explanation` (model).
+**triage.json** — `repo`, `generatedAt`, `ranking`, `summary` (model), and
+`prs[]` in queue order: `rank`, `attention` (copied from the PR's tour),
+`number`, `title`, `url`, `author`, `draft`, `labels`, `ageDays`,
+`additions`, `deletions`, `filesChanged`, `readLines`, `noiseLines`,
+`noiseFiles`, `intent`, `highFacts[]`, and `tour` (the file name of its tour).
 
-**tour-<n>.json** — `pr` (metadata), `intent` (`status`: `spec` |
-`described` | `title only` | `UNKNOWN`, `sources[]` of `{ type: spec |
-description | issue | commits | title, source, text }`, strongest first),
-`explains[]` (model: `quote`, `files`), `unexplained[]` (derived: non-noise
-files no quote explains; a test inherits its code's explanation),
-`unmatched[]` (derived: quotes with no file), `whatItDoes` (model),
-`claims[]` (`quote`, `file`, `line`, `note`), `items[]` (`source`: `fact` |
-`model` | `map`, `kind`, `severity`, `file`, `line`, `side`, `text`, `why`),
-`fileNotes`, `order[]` (`path`, `role`: `code` | `test` | `noise`,
-`pairedWith`, `why`), `orderRule`, and `files[]` (`path`, `oldPath`, `status`,
-`kind`, `noise`, `areas`, `additions`, `deletions`, `hunks[]` with `lines[]`
-of `{ t: "add"|"del"|"ctx", s, o, n }`).
+**tour-<n>.json** — `pr` (metadata), `attention` (model: `level`: `critical` |
+`high` | `medium` | `low`, `whatHappened`, `why`, `file`, `line`, `side`),
+`intent` (`status`: `spec` | `described` | `title only` | `UNKNOWN`,
+`sources[]` of `{ type: spec | description | issue | commits | title, source,
+text }`, strongest first), `explains[]` (model: `quote`, `files`),
+`unexplained[]` (derived: non-noise files no quote explains; a test inherits
+its code's explanation), `unmatched[]` (derived: quotes with no file),
+`whatItDoes` (model), `claims[]` (`quote`, `file`, `line`, `note`), `items[]`
+(`source`: `fact` | `model` | `map`, `kind`, `severity`, `file`, `line`,
+`side`, `text`, `why`), `fileNotes`, `order[]` (`path`, `role`: `code` |
+`test` | `noise`, `pairedWith`, `why`), `orderRule`, and `files[]` (`path`,
+`oldPath`, `status`, `kind`, `noise`, `areas`, `additions`, `deletions`,
+`hunks[]` with `lines[]` of `{ t: "add"|"del"|"ctx", s, o, n }`).
 
 ## In CI
 
-The deterministic half needs no model: `triage.mjs` or `tour.mjs`, then
-`render.mjs`, gives a complete page with facts, ranks, and reading order —
-the WHY panel just says "not annotated yet". Upload the `.html` as a build
-artifact. Add the model step only where an agent runs in the pipeline.
+The deterministic half needs no model: `triage.mjs` (or `tour.mjs`), then
+`render.mjs`, gives the queue and every tour with facts, noise, and reading
+order — attention shows "not judged" and the WHY panel "not annotated yet".
+Upload the `.pr-review/` folder as one build artifact; the pages link to
+each other. Add the model step only where an agent runs in the pipeline.

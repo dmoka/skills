@@ -5,8 +5,10 @@
 //
 //   node annotate.mjs <report.json> <notes.json>
 //
-// Triage notes: { "summary": "...", "prs": { "<number>": "one sentence" } }
-// Tour notes:   { "whatItDoes": "...",
+// Triage notes: { "summary": "...", "order": [<pr number>, ...] }   — most attention first
+// Tour notes:   { "attention": { "level": "critical|high|medium|low", "whatHappened": "...", "why": "...",
+//                                "file": "...", "line": 12, "code": "<fragment of that line>", "side": "new|old" },
+//                 "whatItDoes": "...",
 //                 "claims": [{ "quote": "<verbatim from the PR text>", "file": "...", "line": 12, "code": "<fragment of that line>", "note": "..." }],
 //                 "items":  [{ "severity": "high|medium|low", "file": "...", "line": 12, "code": "<fragment of that line>", "side": "new|old",
 //                              "title": "...", "why": "..." }],
@@ -14,7 +16,8 @@
 //                 "fileNotes": { "<path>": "..." } }
 // Exit 1 with a list of every problem; nothing is written unless all notes pass.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { readingOrder, stemOf, testsSource } from "./lib.mjs";
 
 const [reportPath, notesPath] = process.argv.slice(2);
@@ -33,16 +36,41 @@ function checkText(where, text, { required = false, max = 600 } = {}) {
   if (v) errors.push(`${where}: contains "${v[0]}" — this report points attention, it never gives a verdict`);
 }
 
+const LEVELS = ["critical", "high", "medium", "low"];
+
 if (report.kind === "triage") {
-  const numbers = new Set(report.prs.map((p) => String(p.number)));
+  // The order is the model's; the gate checks it is complete and consistent
+  // with the attention each PR's own judge gave it.
   checkText("summary", notes.summary, { max: 800 });
-  for (const [n, text] of Object.entries(notes.prs ?? {})) {
-    if (!numbers.has(n)) errors.push(`prs.${n}: no open PR #${n} in this report`);
-    checkText(`prs.${n}`, text, { required: true, max: 300 });
+  const order = (notes.order ?? []).map(Number);
+  const known = new Set(report.prs.map((p) => p.number));
+  const seen = new Set();
+  for (const n of order) {
+    if (!known.has(n)) errors.push(`order: #${n} is not an open PR in this report`);
+    if (seen.has(n)) errors.push(`order: #${n} appears twice`);
+    seen.add(n);
+  }
+  for (const n of known) if (!seen.has(n)) errors.push(`order: #${n} is missing — every open PR gets a place`);
+  const attentionOf = new Map();
+  for (const p of report.prs) {
+    const path = join(dirname(reportPath), p.tour);
+    const tour = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
+    if (!tour?.attention) errors.push(`#${p.number}: ${p.tour} has no attention yet — judge it first (annotate the tour with an "attention" block)`);
+    else attentionOf.set(p.number, tour.attention);
+  }
+  let prev = 0;
+  for (const n of order) {
+    const a = attentionOf.get(n);
+    if (!a) continue;
+    const lvl = LEVELS.indexOf(a.level);
+    if (lvl < prev) errors.push(`order: #${n} is "${a.level}" but sits below a "${LEVELS[prev]}" PR — order by level first, then by your judgement within a level`);
+    prev = Math.max(prev, lvl);
   }
   if (!errors.length) {
     report.summary = notes.summary ?? null;
-    for (const p of report.prs) p.explanation = notes.prs?.[String(p.number)] ?? null;
+    const rank = new Map(order.map((n, i) => [n, i + 1]));
+    for (const p of report.prs) { p.attention = attentionOf.get(p.number); p.rank = rank.get(p.number); }
+    report.prs.sort((a, b) => a.rank - b.rank);
   }
 } else if (report.kind === "tour") {
   const files = new Map(report.files.map((f) => [f.path, f]));
@@ -67,6 +95,19 @@ if (report.kind === "triage") {
   const intentText = norm(report.intent.sources.map((s) => s.text).join("\n"));
 
   checkText("whatItDoes", notes.whatItDoes, { required: true, max: 600 });
+
+  // Attention: how much of a reviewer's attention this change needs, and the
+  // one line that drives the judgement. Optional for a standalone tour.
+  const at = notes.attention;
+  if (at) {
+    if (!LEVELS.includes(at.level)) errors.push(`attention.level: must be one of ${LEVELS.join(", ")}`);
+    checkText("attention.whatHappened", at.whatHappened, { required: true, max: 240 });
+    checkText("attention.why", at.why, { required: true, max: 320 });
+    if (at.file || at.level !== "low") {
+      if (!at.file || at.line == null) errors.push(`attention: a "${at.level}" judgement needs "file", "line" and "code" — the line that drives it`);
+      else { const e = lineIn(at.file, at.line, at.side, at.code); if (e) errors.push(`attention: ${e}`); }
+    }
+  }
   for (const [i, c] of (notes.claims ?? []).entries()) {
     if (!c.quote) { errors.push(`claims[${i}]: missing "quote"`); continue; }
     if (!quoteOk(c.quote)) errors.push(`claims[${i}]: "${c.quote.slice(0, 60)}" is not a verbatim quote (4+ chars, exact case) from the author's text`);
@@ -102,6 +143,7 @@ if (report.kind === "triage") {
 
   if (!errors.length) {
     report.whatItDoes = notes.whatItDoes;
+    report.attention = at ? { level: at.level, whatHappened: at.whatHappened, why: at.why, file: at.file ?? null, line: at.line ?? null, side: at.side ?? "new" } : null;
     report.claims = notes.claims ?? [];
     report.items = [
       ...report.items.filter((x) => x.source === "fact"),

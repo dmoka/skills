@@ -79,19 +79,9 @@ export function loadConfig(path = CONFIG_PATH) {
   cfg.areas ??= {};
   cfg.tests ??= [];
   cfg.noise ??= [];
-  cfg.triage ??= { rules: [] };
   cfg.tour ??= {};
-  for (const r of cfg.triage.rules ?? []) {
-    if (!r.id || typeof r.points !== "number" || !r.when) {
-      throw new Error(`${path}: every triage rule needs "id", numeric "points" and "when" — got ${JSON.stringify(r)}`);
-    }
-    for (const k of Object.keys(r.when)) {
-      if (!CONDITIONS.includes(k)) throw new Error(`${path}: rule "${r.id}" uses unknown condition "${k}". Known: ${CONDITIONS.join(", ")}`);
-    }
-    for (const a of r.when.areas ?? []) {
-      if (!cfg.areas[a]) throw new Error(`${path}: rule "${r.id}" names area "${a}", which is not defined under "areas"`);
-    }
-  }
+  // Everything in the file is optional. It only tunes noise, tests, areas
+  // (hints the model sees) and the reading order; nothing in it ranks PRs.
   return cfg;
 }
 
@@ -367,76 +357,6 @@ export function computeFacts(files, cfg) {
 function firstLine(f) {
   for (const h of f.hunks) for (const l of h.lines) if (l.t !== "ctx") return l.n ?? l.o;
   return null;
-}
-
-// ---------- PR-level facts for triage rules ----------
-
-export const CONDITIONS = [
-  "areas", "paths", "onlyPaths", "linesChanged", "linesChangedAll", "filesChanged", "ageDays", "draft", "labels",
-  "author", "skippedTestsAdded", "srcWithoutTests", "addedLinesMatch", "destructiveSql", "assertionsRemoved",
-];
-
-export function prFacts(pr, files, cfg, now = Date.now()) {
-  if (files.some((f) => !f.meta)) classifyAll(files, cfg);
-  const facts = computeFacts(files, cfg);
-  const count = (k) => facts.filter((x) => x.kind === k).length;
-  return {
-    paths: files.map((f) => f.path),
-    areas: [...new Set(files.flatMap((f) => (f.meta.noise ? [] : f.meta.areas)))],
-    // Lines a human reads: noise (lockfiles, generated, renames, formatting) excluded.
-    linesChanged: files.filter((f) => !f.meta.noise).reduce((n, f) => n + f.additions + f.deletions, 0),
-    linesChangedAll: pr.additions + pr.deletions,
-    filesChanged: pr.changedFiles ?? files.length,
-    ageDays: Math.floor((now - Date.parse(pr.createdAt)) / 86400000),
-    draft: !!pr.isDraft,
-    labels: (pr.labels ?? []).map((l) => l.name),
-    author: pr.author?.login ?? null,
-    skippedTestsAdded: count("skip-added") + count("focus-added"),
-    srcWithoutTests: count("untested-change") > 0,
-    destructiveSql: count("destructive-sql"),
-    assertionsRemoved: count("assertions-removed"),
-    addedText: files.filter((f) => !f.meta.noise).flatMap((f) => added(f).map((l) => l.s)).join("\n"),
-    noiseFiles: files.filter((f) => f.meta.noise).length,
-    facts,
-  };
-}
-
-function compare(value, cond) {
-  if (typeof cond === "boolean" || typeof cond === "string") return value === cond;
-  if (typeof cond === "number") return value === cond;
-  const ops = { gt: (a, b) => a > b, gte: (a, b) => a >= b, lt: (a, b) => a < b, lte: (a, b) => a <= b, eq: (a, b) => a === b };
-  return Object.entries(cond).every(([op, b]) => {
-    if (!ops[op]) throw new Error(`unknown comparator "${op}" (use gt, gte, lt, lte, eq)`);
-    return ops[op](value, b);
-  });
-}
-
-// Every condition in a rule must hold (AND). Returns what matched, as evidence.
-export function evalRule(rule, f, cfg) {
-  const ev = [];
-  for (const [k, c] of Object.entries(rule.when)) {
-    let ok;
-    switch (k) {
-      case "areas": { const hit = c.filter((a) => f.areas.includes(a)); ok = hit.length > 0; if (ok) ev.push(`area ${hit.join(", ")}`); break; }
-      case "paths": { const hit = f.paths.filter((p) => matchAny(p, c)); ok = hit.length > 0; if (ok) ev.push(hit.slice(0, 3).join(", ") + (hit.length > 3 ? ` +${hit.length - 3}` : "")); break; }
-      case "onlyPaths": ok = f.paths.length > 0 && f.paths.every((p) => matchAny(p, c)); break;
-      case "labels": ok = c.some((l) => f.labels.includes(l)); break;
-      case "author": ok = (Array.isArray(c) ? c : [c]).includes(f.author); break;
-      case "addedLinesMatch": ok = new RegExp(c, "im").test(f.addedText); break;
-      default: {
-        ok = compare(f[k], c);
-        if (!ok) break;
-        // Name the files behind a fact-based condition, so the rank can be checked.
-        const kinds = { srcWithoutTests: ["untested-change"], skippedTestsAdded: ["skip-added", "focus-added"], destructiveSql: ["destructive-sql"], assertionsRemoved: ["assertions-removed"] }[k];
-        if (kinds && f.facts) {
-          const where = f.facts.filter((x) => kinds.includes(x.kind)).map((x) => `${x.file}${x.line ? ":" + x.line : ""}`);
-          ev.push(...where.slice(0, 4), ...(where.length > 4 ? [`+${where.length - 4} more`] : []));
-        } else if (typeof f[k] === "number") ev.push(`${k} ${f[k]}`);
-      }
-    }
-    if (!ok) return null;
-  }
-  return ev;
 }
 
 // ---------- reading order (pr-tour) ----------

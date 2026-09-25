@@ -1,98 +1,68 @@
 #!/usr/bin/env node
-// Ranks the open PR queue by the rules in .github/pr-review.jsonc.
-// Deterministic: same PRs + same config = same ranking. No model involved.
+// Layer 1 for the whole open PR queue: builds a tour-<n>.json for every open
+// PR (files, noise, FACT items, reading order, the author's words) and a
+// triage.json that lists them. Deterministic, no model involved. The model
+// then judges each PR's attention level and orders the queue; annotate.mjs
+// checks both.
 //
-//   node triage.mjs [--repo owner/name] [--config path] [--out dir] [--limit 100]
+//   node triage.mjs [--repo owner/name] [--out dir] [--limit 100] [--config path]
 //
-// Writes <out>/triage.json (default out: .pr-review). Exit 2 = no config.
+// Writes <out>/triage.json and <out>/tour-<n>.json (default out: .pr-review).
+// Rerunning replaces them, model notes included — judge after the last run.
 
-import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { join } from "node:path";
-import { SCHEMA_VERSION, CONFIG_PATH, gh, ghJson, resolveRepo, parseArgs, loadConfig, parseDiff, classifyAll, prFacts, evalRule } from "./lib.mjs";
+import { SCHEMA_VERSION, CONFIG_PATH, ghJson, resolveRepo, parseArgs, loadConfig } from "./lib.mjs";
+import { buildTour, writeReport, summarize } from "./build.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const configPath = args.config ?? CONFIG_PATH;
-const cfg = loadConfig(configPath);
-if (!cfg) {
-  console.error(`No config at ${configPath}. Write one first (see references/config.md), then rerun.`);
-  process.exit(2);
-}
-const rules = cfg.triage.rules ?? [];
-if (rules.length === 0) {
-  console.error(`${configPath} has no "triage.rules". Without rules there is no ranking, only a list.`);
-  process.exit(2);
-}
-
+const cfg = loadConfig(configPath); // optional
 const repo = resolveRepo(args.repo);
 const outDir = args.out ?? ".pr-review";
-const limit = String(args.limit ?? 100);
 const now = Date.now();
 
-const prs = ghJson([
-  "pr", "list", "--state", "open", "--limit", limit,
-  "--json", "number,title,author,createdAt,isDraft,labels,additions,deletions,changedFiles,url,headRefName,baseRefName,reviewDecision",
-], { repo });
+const open = ghJson(["pr", "list", "--state", "open", "--limit", String(args.limit ?? 100), "--json", "number,createdAt,labels"], { repo });
+if (!open.length) { console.log(`${repo} has no open pull requests.`); process.exit(0); }
 
-const ranked = [];
-for (const pr of prs) {
-  process.stderr.write(`  #${pr.number} ${pr.title.slice(0, 60)}\n`);
-  const files = parseDiff(gh(["pr", "diff", String(pr.number)], { repo }));
-  classifyAll(files, cfg);
-  const facts = prFacts(pr, files, cfg, now);
-  const matched = [];
-  for (const rule of rules) {
-    const evidence = evalRule(rule, facts, cfg);
-    if (evidence) matched.push({ id: rule.id, points: rule.points, why: rule.why ?? rule.id, evidence });
-  }
-  ranked.push({
-    number: pr.number,
-    title: pr.title,
-    url: pr.url,
-    author: facts.author,
-    draft: facts.draft,
-    labels: facts.labels,
-    reviewDecision: pr.reviewDecision || null,
-    ageDays: facts.ageDays,
-    createdAt: pr.createdAt,
-    additions: pr.additions,
-    deletions: pr.deletions,
-    filesChanged: facts.filesChanged,
-    noiseFiles: facts.noiseFiles,
-    areas: facts.areas,
-    files: files.map((f) => ({ path: f.path, kind: f.meta.kind, noise: f.meta.noise, areas: f.meta.areas, additions: f.additions, deletions: f.deletions })),
-    score: matched.reduce((s, m) => s + m.points, 0),
-    matched,
-    facts: facts.facts.filter((f) => f.severity === "high").slice(0, 5),
-    explanation: null,
+const prs = [];
+for (const { number, createdAt, labels } of open.sort((a, b) => a.number - b.number)) {
+  let report;
+  try { report = buildTour({ number, repo }, cfg, configPath); }
+  catch (e) { console.error(`  #${number}: ${e.message}`); continue; }
+  writeReport(outDir, `tour-${number}.json`, report);
+  const s = summarize(report);
+  prs.push({
+    number,
+    title: report.pr.title,
+    url: report.pr.url,
+    author: report.pr.author,
+    draft: report.pr.draft,
+    labels: (labels ?? []).map((l) => l.name),
+    ageDays: Math.floor((now - Date.parse(createdAt)) / 86400000),
+    createdAt,
+    additions: report.pr.additions,
+    deletions: report.pr.deletions,
+    filesChanged: report.files.length,
+    readLines: s.readLines,
+    noiseLines: s.noiseLines,
+    noiseFiles: s.noiseFiles,
+    intent: report.intent.status,
+    highFacts: s.highFacts.map((f) => ({ file: f.file, line: f.line, side: f.side, text: f.text })),
+    tour: `tour-${number}.json`,
+    attention: null, // copied from the tour's annotated attention by annotate.mjs
+    rank: null,      // set by annotate.mjs from the model's order
   });
+  console.log(`#${String(number).padEnd(4)} ${report.pr.title.slice(0, 56).padEnd(56)} read ${String(s.readLines).padStart(5)} · noise ${String(s.noiseLines).padStart(5)} · ${s.highFacts.length} high facts · intent ${report.intent.status}`);
 }
 
-// Highest score first; ties go to the PR that has waited longest.
-ranked.sort((a, b) => b.score - a.score || Date.parse(a.createdAt) - Date.parse(b.createdAt));
-ranked.forEach((p, i) => (p.rank = i + 1));
-
-const configText = readFileSync(configPath, "utf8");
-const out = {
+const file = writeReport(outDir, "triage.json", {
   kind: "triage",
   schemaVersion: SCHEMA_VERSION,
   generatedAt: new Date(now).toISOString(),
   repo,
-  config: {
-    path: configPath,
-    sha256: createHash("sha256").update(configText).digest("hex").slice(0, 12),
-    rules: rules.map((r) => ({ id: r.id, points: r.points, why: r.why ?? r.id, when: r.when, matchedPRs: ranked.filter((p) => p.matched.some((m) => m.id === r.id)).map((p) => p.number) })),
-    areas: cfg.areas,
-  },
-  scoring: "score = sum of points of every rule whose conditions ALL hold; ties: oldest PR first",
-  prs: ranked,
+  config: { path: cfg ? configPath : null },
+  ranking: "the model read every PR and judged how much attention it needs; each judgement points at the line that drives it",
   summary: null,
-};
-
-mkdirSync(outDir, { recursive: true });
-const file = join(outDir, "triage.json");
-writeFileSync(file, JSON.stringify(out, null, 2) + "\n");
+  prs,
+});
 console.log(file);
-for (const p of ranked) {
-  console.log(`${String(p.rank).padStart(2)}. ${String(p.score).padStart(4)}  #${p.number} ${p.title}  [${p.matched.map((m) => `${m.id} ${m.points > 0 ? "+" : ""}${m.points}`).join(", ") || "no rule matched"}]`);
-}
+console.log(`Next: judge each tour-<n>.json (attention + notes), then order the queue.`);

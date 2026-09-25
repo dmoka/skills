@@ -45,6 +45,10 @@ Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
 3. **Write the WHY** to `.pr-review/tour-<n>.notes.json`. The full format,
    a worked example, and the severity rubric are in
    [references/notes.md](references/notes.md). In short:
+   - `attention` — optional here, required when `pr-triage` runs you: how
+     much attention the PR needs (`critical` / `high` / `medium` / `low`),
+     what happened, why, and the line that drives it. Shown as a badge at
+     the top of the tour.
    - `whatItDoes` — two or three sentences on what the diff actually does,
      shown as the model's reading, never as the author's intent.
    - `explains` — **the intent map**: each thing the author says the PR
