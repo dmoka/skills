@@ -41,15 +41,22 @@ Judge the change after you have read it, not from its title or size.
 
 | Level | Use when |
 |---|---|
-| **critical** | it will very likely break money, access, or stored data on a normal path — or it hides such a change (a skipped test, an unstated drop) |
-| **high** | it can change money, access, stored data, or who gets a scarce thing, or it contradicts what the author claims, and a reader must check it |
-| **medium** | a real behaviour change a reader should understand, with a contained impact |
-| **low** | mechanical or contained: renames, formatting, dependency bumps with nothing notable, tests only, drafts |
+| **critical** | on a path that runs today, it will very likely break money, access, or stored data — or it destroys data that cannot be restored (a dropped column, a deleting migration) |
+| **high** | it can change money, access, stored data, or who gets a scarce thing; or it contradicts what the author says; or it hides a change (a skipped test that covers it, an unstated change of behaviour) |
+| **medium** | a real behaviour change a reader should understand, with a contained impact; or a high-level risk in code nothing calls yet |
+| **low** | mechanical or contained: renames, formatting, tests only, dependency bumps with nothing notable |
+
+- **Code nothing calls yet** is judged one level lower than it would be when
+  wired, and the `why` says what happens once it is.
+- **A draft is judged like any PR.** Say it is a draft in `why`; do not lower
+  the level for it.
+- **Notable in a dependency bump:** a major version change (direct or in the
+  lockfile), a raised `engines` floor, a new package, a new install script.
 
 - `whatHappened`: one sentence, plain words, what the PR really does.
 - `why`: one sentence, why it deserves this level. Name the risk, not a verdict.
 - `file` / `line` / `code`: the one line that drives the judgement. Required for
-  everything above **low**.
+  everything above **low**, allowed on low.
 - Big is not heavy. A 900-line rename is **low**; a one-token change to a price
   is **critical**.
 
@@ -92,6 +99,10 @@ description, issue, commit, spec.
   described column and drops another), leave it out so it shows as ASK WHY,
   and point an item at the unstated part.
 - A PR whose every file is noise needs no intent map.
+- A file with a small unstated extra (one added attribute) is still ASK WHY —
+  that is honest; say it is small in its file note.
+- A sentence that only describes tests maps to the test file.
+- Quotes are verbatim: backticks, if the author wrote them, are part of it.
 - A quote with no matching change: `"files": []`.
 - A file nothing explains: leave it out. The gate lists it as ASK WHY.
 
@@ -99,7 +110,8 @@ description, issue, commit, spec.
 
 A claim is a **checkable promise** — a sentence that could turn out false:
 "no behaviour change for X", "idempotent", "only formatting", "seats stay
-sold", "the UI comes in a follow-up", "no new dependencies". Descriptive text
+sold", "the UI comes in a follow-up", "no new dependencies" — and a title
+that promises an outcome ("Speed up booking tests"). Descriptive text
 ("adds gift cards") is intent-map material, not a claim. Point each claim at
 the line where a reader can test it (`side: "old"` works here too); a claim
 with no single line gets no `file`. No claims is a valid answer. When the
@@ -120,7 +132,8 @@ is the one this change breaks").
 | **medium** | a behaviour change nobody mentioned, or one worth a test |
 | **low** | worth a glance: cost, naming, a missing edge case with small impact |
 
-Look for: a claim the code contradicts; a risky decision nobody mentioned; a
+Items may point at context lines as well as changed ones. Look for: a claim
+the code contradicts; a risky decision nobody mentioned; a
 missing security decision (a new input with no validation, a new action with
 no authorization check, a secret reaching a log); an edge case the tests skip;
 a code comment that promises something the code does not do (comments are not

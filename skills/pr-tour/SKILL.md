@@ -40,7 +40,7 @@ Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
    noise included — skim it, it is collapsed for humans, not for you. Read
    surrounding source **at the PR head**, without checking it out (others
    may share the checkout): `git fetch origin <head>` then `git show
-   FETCH_HEAD:<path>`. Other open PRs that touch the same code are fair
+   "origin/<head>:<path>"` (quoted: zsh reads `:a` and `:s` as modifiers). Other open PRs that touch the same code are fair
    game: a change that breaks another open PR is a medium item.
 3. **Write the WHY** to `.pr-review/tour-<n>.notes.json`. The full format,
    a worked example, and the severity rubric are in

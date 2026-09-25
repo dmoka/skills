@@ -27,35 +27,59 @@ the files in `references/` as raw text with `curl -sSL`.
 2. **Compute.** `node scripts/triage.mjs` (add `--repo owner/name` outside
    the repo). For every open PR it writes `.pr-review/tour-<n>.json` — files,
    noise, FACT items, reading order, the author's words — and it writes
-   `.pr-review/triage.json` listing them. No model is involved. Rerunning
-   replaces everything, judgements included, so judge after the last run.
+   `.pr-review/triage.json` listing them, and renders the unjudged pages. No
+   model is involved. Rerunning replaces the reports and pages, judgements
+   included, and removes those of PRs that closed — judge after the last
+   run.
    More than 20 open PRs: say how many, and ask before judging them all.
 3. **Judge each PR on its own.** For each `tour-<n>.json`, read that PR —
    `gh pr diff <n>`, noise skimmed, surrounding code at the PR head
-   (`git fetch origin <head>` then `git show FETCH_HEAD:<path>`) — and write
+   (`git fetch origin <head>` then `git show "origin/<head>:<path>"` — never
+   `FETCH_HEAD`, which parallel judges overwrite) — and write
    `.pr-review/tour-<n>.notes.json` in the format of
    [references/notes.md](references/notes.md), **with the `attention` block**.
    Then `node scripts/annotate.mjs .pr-review/tour-<n>.json
-   .pr-review/tour-<n>.notes.json` and fix the notes until it passes.
+   .pr-review/tour-<n>.notes.json` — it writes the checked notes into
+   `tour-<n>.json` — and fix the notes until it passes.
    **Use one fresh sub-agent per PR when you can**, in parallel, each given
-   only its PR number, this step, and the notes reference. A judge that has
-   read the other PRs grades on a curve. Without sub-agents, judge them one
-   by one and judge each on its own merits.
+   only the judge brief below. A judge that has read the other PRs grades on
+   a curve. Without sub-agents, judge them one by one and judge each on its
+   own merits.
 4. **Order the queue.** Read every PR's `attention`. Write
    `.pr-review/triage.notes.json`: `{ "summary": "...", "order": [7, 6, ...] }`
-   — most attention first, by level, then by your judgement within a level
-   (what breaks first, what blocks others). The summary is two or three
-   sentences on the queue as a whole, including conflicts between PRs.
+   — most attention first, by level; within a level, irreversible before
+   reversible, live code paths before code nothing calls yet, and what
+   blocks other PRs before what does not. The summary is two or three
+   sentences on the queue as a whole; use `overlaps` in `triage.json` (files
+   two or more PRs change) for conflicts between PRs.
    `node scripts/annotate.mjs .pr-review/triage.json .pr-review/triage.notes.json`
    checks every PR is placed once, judged, and never below a lower level.
 5. **Render.** `node scripts/render.mjs .pr-review/triage.json` writes
    `triage.html` and every `tour-<n>.html`, linked both ways: one folder, no
    server, safe to publish as a CI artifact. Look at the queue before you
    report — in a browser if you have one (`python3 -m http.server -d
-   .pr-review` when `file://` is blocked), or at least confirm the JSON.
+   .pr-review` when `file://` is blocked). Check: no PR shows "not judged",
+   the order matches your notes, and each evidence link opens its tour at
+   the right line.
 6. **Report** in chat: the path to `triage.html`, then the queue — level,
    PR, what happened, why — critical and high in full, the rest as one line
    each.
+
+## Judge brief
+
+Fill in the absolute paths and hand this, and nothing else, to each judge:
+
+> Judge pull request #N in the git repo at REPO (run commands there). Read
+> SKILL_DIR/references/notes.md and follow it. Read the PR with `gh pr diff N`
+> and `gh pr view N`; read surrounding code at the PR head with
+> `git fetch origin HEAD_BRANCH` then `git show "origin/HEAD_BRANCH:<path>"`.
+> Never check out a branch — others share this checkout. Skim noise; when
+> the author claims something about it ("formatting only"), check the claim
+> with any tool you like. Write REPO/.pr-review/tour-N.notes.json, including
+> the `attention` block, then run `node SKILL_DIR/scripts/annotate.mjs
+> REPO/.pr-review/tour-N.json REPO/.pr-review/tour-N.notes.json`; it copies
+> your checked notes into tour-N.json. Fix your notes until it passes. Do not
+> touch GitHub or any other file. Reply with your attention block.
 
 ## Hard rules
 

@@ -296,6 +296,7 @@ ${r.summary ? `<h2>Summary <span class="tag tag-model">MODEL</span></h2><div cla
 <div class="box"><table>
 <thead><tr><th class="r">#</th><th>Attention</th><th>Pull request · what happened · why</th><th class="r">To read</th><th class="r">Age</th><th></th></tr></thead>
 <tbody>${rows}</tbody></table></div>
+${(r.overlaps ?? []).length ? `<h2>PRs that change the same files <span class="count">merge order matters</span></h2><div class="box"><table><tbody>${r.overlaps.slice(0, 12).map((o) => `<tr><td class="mono" style="width:55%">${esc(o.file)}</td><td>${o.prs.map((n) => `<a class="fchip" href="${tours.has(n) ? `tour-${n}.html` : "#"}">#${n}</a>`).join(" ")}</td></tr>`).join("")}${r.overlaps.length > 12 ? `<tr><td colspan="2" class="empty">+${r.overlaps.length - 12} more files</td></tr>` : ""}</tbody></table></div>` : ""}
 <div class="footer"><span>Attention is the model's judgement after reading each PR. Blue text is the model's; red dots are facts a script computed from the diff.</span><span>An order to read in — never a verdict. The last PR still gets read.</span></div>`;
   return page(`Triage · ${r.repo}`, top, body, { kind: "triage", schemaVersion: r.schemaVersion });
 }

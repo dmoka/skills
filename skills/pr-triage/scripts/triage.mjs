@@ -10,6 +10,10 @@
 // Writes <out>/triage.json and <out>/tour-<n>.json (default out: .pr-review).
 // Rerunning replaces them, model notes included — judge after the last run.
 
+import { execFileSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { SCHEMA_VERSION, CONFIG_PATH, ghJson, resolveRepo, parseArgs, loadConfig } from "./lib.mjs";
 import { buildTour, writeReport, summarize } from "./build.mjs";
 
@@ -23,12 +27,23 @@ const now = Date.now();
 const open = ghJson(["pr", "list", "--state", "open", "--limit", String(args.limit ?? 100), "--json", "number,createdAt,labels"], { repo });
 if (!open.length) { console.log(`${repo} has no open pull requests.`); process.exit(0); }
 
+// A rerun replaces the queue: pages and reports of PRs that are no longer open go.
+const openSet = new Set(open.map((p) => p.number));
+if (existsSync(outDir)) {
+  for (const f of readdirSync(outDir)) {
+    const m = f.match(/^tour-(\d+)\.(json|html|notes\.json)$/);
+    if (m && !openSet.has(Number(m[1]))) rmSync(join(outDir, f));
+  }
+}
+
 const prs = [];
+const touches = new Map(); // path -> PR numbers, to find PRs that collide
 for (const { number, createdAt, labels } of open.sort((a, b) => a.number - b.number)) {
   let report;
   try { report = buildTour({ number, repo }, cfg, configPath); }
   catch (e) { console.error(`  #${number}: ${e.message}`); continue; }
   writeReport(outDir, `tour-${number}.json`, report);
+  for (const f of report.files) for (const p of new Set([f.path, f.oldPath].filter(Boolean))) touches.set(p, [...(touches.get(p) ?? []), number]);
   const s = summarize(report);
   prs.push({
     number,
@@ -62,7 +77,11 @@ const file = writeReport(outDir, "triage.json", {
   config: { path: cfg ? configPath : null },
   ranking: "the model read every PR and judged how much attention it needs; each judgement points at the line that drives it",
   summary: null,
+  // Files two or more open PRs change: merge order matters, and one may break the other.
+  overlaps: [...touches].filter(([, n]) => n.length > 1).map(([file, prs]) => ({ file, prs })).sort((a, b) => b.prs.length - a.prs.length || a.file.localeCompare(b.file)),
   prs,
 });
 console.log(file);
+// Render right away, so the pages never lag behind the JSON.
+execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "render.mjs"), file], { stdio: "inherit" });
 console.log(`Next: judge each tour-<n>.json (attention + notes), then order the queue.`);
