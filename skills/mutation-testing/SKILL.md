@@ -1,6 +1,6 @@
 ---
 name: mutation-testing
-description: Measure test quality with mutation testing and close the gaps it finds. Use when asked whether tests are any good, when coverage is high but confidence is low, after AI wrote or changed tests, or when the user mentions mutation testing, mutation score, surviving mutants, or names a mutation tool (Stryker, Pitest, mutmut, Infection, cargo-mutants).
+description: "Mutation-test a repo: find tests that would miss bugs. Measure test quality with mutation testing and close the gaps it finds. Use when asked whether tests are any good, when coverage is high but confidence is low, after AI wrote or changed tests, or when the user mentions mutation testing, mutation score, surviving mutants, or names a mutation tool (Stryker, Pitest, mutmut, Infection, cargo-mutants)."
 ---
 
 # Mutation testing
