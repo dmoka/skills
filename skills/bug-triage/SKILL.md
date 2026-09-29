@@ -51,3 +51,5 @@ say, find the existing unit tests and put your new test next to the ones for the
    sentence, the root cause, the fix, the new test, the test run result, and "Reported via
    a bug report — needs human review before merge."
 8. **Report back** with the PR link, or the "could not reproduce" summary.
+
+Last verified: 2026-09-28 with Hermes v0.21.5 and Claude Code routines (research preview) — email to pull request, both

@@ -146,3 +146,5 @@ code", not on an absolute number.
 
 A high score with unexplained survivors is not done. A finished report with
 three explained, ranked survivors the user chose to accept is.
+
+Last verified: 2026-09-02 with Claude Code (live test on nine stacks)

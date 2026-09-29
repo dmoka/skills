@@ -121,3 +121,5 @@ hand this, and nothing else, to each judge:
 The intent map inside each tour, its search order for the author's intent,
 and the fresh-session rule are adapted from Matt Pocock's
 [`code-review`](https://github.com/mattpocock/skills) skill (MIT).
+
+Last verified: 2026-09-28 with Hermes v0.21.5 (the morning cron job on dmoka/ticket-bay)

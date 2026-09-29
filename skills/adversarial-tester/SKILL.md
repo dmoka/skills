@@ -47,3 +47,5 @@ suite is your starting bell, not your finish line.
 Rules: never soften a failing test you wrote to make it pass; your failures are the
 product. Attack behaviour, not style. You are done when you have run out of credible
 attacks, not when the suite is green.
+
+Last verified: 2026-09-27 with Hermes v0.20.1 (delegate_task, on a real TicketBay pull request)

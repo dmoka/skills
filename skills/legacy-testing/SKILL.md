@@ -44,3 +44,5 @@ Target: mutation score on <area> ≥ <n>% (coverage is a hint, not the goal)
 - A flaky test is not a net. When a test passes and fails without a change, quarantine it and report it before building on it.
 - Long suites: run the narrowest command that covers the area while working (one file, one folder), and the full suite at the end of each step.
 - Aim the mutation score at the load-bearing area, not the whole repo; a repo-wide number hides the money code in the average.
+
+Last verified: 2026-09-29 with Claude Code 2.1.284 (TicketBay with deleted tests, and a real untested MERN app)
