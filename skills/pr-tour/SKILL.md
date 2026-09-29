@@ -129,3 +129,5 @@ review against — say so instead of guessing one. Schema:
 
 The intent search order and the fresh-session rule are adapted from Matt
 Pocock's [`code-review`](https://github.com/mattpocock/skills) skill (MIT).
+
+Last verified: 2026-09-25 with Claude Code (shipped in dmoka/skills #1)
