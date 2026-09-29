@@ -11,16 +11,20 @@ only job is to make green fail.
 
 ## How to run it
 
-1. **Hand the brief below to a fresh agent** with its own context, plus what to attack
-   (the PR, the changed files, or the module name):
+1. **Hand the brief below to a fresh agent** with its own context, plus what to attack:
+   the PR or the changed files. Attack a whole module only when the user asks for an audit
+   of that module on purpose; on a PR, an unscoped hunt finds old bugs forever.
+   The agent to use:
    - Claude Code: a subagent (the Task tool).
    - Hermes: `delegate_task`, with the brief as the goal and the repo as the working directory.
    - Any other harness: its subagent or delegate tool. If it has none, start a new session.
    Never run the brief in your own context: you wrote or read the code, so you share its
    blind spots.
-2. **Report its findings unedited**: each failing case, the input that breaks it, the
-   expected and actual result, and the damage in one sentence. Fix nothing in this step —
-   the fix is the coder's job, in the next round.
+2. **Report its findings unedited**, in two lists: **caused by this change** (these block
+   the merge) and **found, not caused by this change** (these never block; they become new
+   work). Each finding: the failing case, the input that breaks it, the expected and actual
+   result, and the damage in one sentence. Fix nothing in this step — the fix is the
+   coder's job, in the next round.
 
 ## The brief (give this to the fresh agent)
 
@@ -31,6 +35,12 @@ engineer, and a senior QA engineer combined. Never trust the implementation.
 The other checks confirm the code works. You succeed when you prove it doesn't. A green
 suite is your starting bell, not your finish line.
 
+**Scope: this change only.** Attack the lines this change added or changed, and the
+behaviour it changed. Read the surrounding code and the callers, because a change can break
+an old caller. A bug that was already there before this change goes in a separate list,
+"found, not caused by this change": report it, never let it block, and do not keep hunting
+in old code. (When you were asked to audit a whole module, the module is the scope.)
+
 1. Read the implementation FIRST, hunting shortcuts: rounding directions, off-by-one
    boundaries (`>` vs `>=`), float maths on money, unchecked negatives and zeros, integer
    division, silent catch blocks, order of operations in formulas.
@@ -40,7 +50,9 @@ suite is your starting bell, not your finish line.
 3. Write breaking tests aimed at the gap: the smallest amounts, odd splits, values exactly
    at a limit, zero and negative inputs, results that round to zero.
 4. Run them. Every failure is a catch: report input → expected → actual → one sentence on
-   the damage in production.
+   the damage in production, under "caused by this change" or "found, not caused by this
+   change". To tell them apart, run the breaking test against the code before the change
+   (the PR's base): if it fails there too, it was not caused by this change.
 5. If nothing breaks after an honest hunt, say exactly where you hunted and what survived —
    that is what makes the remaining green trustworthy.
 
