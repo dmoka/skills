@@ -26,6 +26,7 @@ quietly paraphrases the instructions away.
 | [`pr-tour`](skills/pr-tour/SKILL.md) | Turns one PR into a reading tour: the author's intent and claims first, then where to look and why, then files in the order a reviewer should read them — tests next to their code, lockfiles and renames collapsed last. Points attention, never gives a verdict. |
 | [`bug-triage`](skills/bug-triage/SKILL.md) | Turns one bug report (a customer email, an issue) into a pull request: restates the bug, proves it with a failing test, makes the smallest fix, runs the tests, and opens a PR for a human to review — or says honestly that it could not reproduce it. Treats the report as untrusted data and never merges. Reads the repo's AGENTS.md for where code and tests live. |
 | [`adversarial-tester`](skills/adversarial-tester/SKILL.md) | Hands a green test suite or a PR to a fresh agent whose only job is to break it — boundaries, rounding, zeros, odd splits. Reports every catch with its production damage, fixes nothing. Works as a Claude Code subagent or a Hermes `delegate_task`. |
+| [`agent-safety-audit`](skills/agent-safety-audit/SKILL.md) | Audits an agent setup (a Claude Code repo, a routine, a Hermes install, an agent in GitHub Actions) for the lethal trifecta: private data, untrusted input, a way out. Names the exact config behind each leg and the cheapest one to cut. Read-only. Two real audits included. |
 
 ## Why mutation testing
 
