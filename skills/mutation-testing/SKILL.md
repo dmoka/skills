@@ -45,9 +45,10 @@ fetch returns prose rather than the literal markdown below, refetch with
    the user names, or the one where a silent bug costs the most (money math,
    permissions, data writes). If nobody names one, pick it yourself: the
    README or package layout usually says where the business logic lives, and
-   the money math is the file to start on. Say which file you chose and why.
-   A whole-repo first run on a real codebase takes hours and often dies; a
-   one-module run finishes in minutes and proves the point. Widen the scope
+   the logic where a silent bug costs the most is the file to start on. Say
+   which file you chose and why. A whole-repo first run on a real codebase
+   takes hours and often dies; a one-module run finishes in minutes and
+   proves the point. Widen the scope
    only after the first run succeeds. On a project small enough that one
    module *is* the whole codebase, say so and move on — do not invent a
    narrower scope to satisfy this step.
