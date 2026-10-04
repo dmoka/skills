@@ -63,10 +63,11 @@ on the right request.
    user approves, or the open questions are listed.
 
 7. **Test the trigger** (needs the `claude` CLI). From the folder where the skill is
-   installed, run `<this-skill>/scripts/fires.sh <skill-name> "<request>" ...` with 3
-   requests that do not name the skill and should fire, and 1 that should not. On a miss,
+   installed, run `<this-skill>/scripts/fires.sh <skill-name> "<request>" ... --not "<request>"`
+   with 3 requests that do not name the skill and should fire, then `--not` and 1 that
+   should not. On a miss,
    add the user's missing words to the front of the description and run it again. Done
-   when 3 of 3 fire and the negative does not.
+   when the script prints PASS (3 of 3 fire, and the negative stays quiet).
 
 ## Writing for agents
 
