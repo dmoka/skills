@@ -33,3 +33,5 @@ refactor (after the net).
 - It found a suspected bug (`serviceFee(0)` is 100, so a 100%-discount order still pays a fee)
   and pinned it for the user instead of "fixing" it.
 - It skipped the steps this repo does not need, with the reason.
+
+This run predates two defaults added on 2026-10-04: a crash-hunt property on every entry point of the target, and the refactor as the plan's last step. A plan written today lists both.
