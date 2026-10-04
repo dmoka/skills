@@ -105,9 +105,7 @@ eval_autopick() {
   for mode in all-installed project-only; do
     echo "== autopick ($mode skills) =="
     local env=(); [ $mode = project-only ] && env=(FIRES_ONLY_PROJECT=1)
-    (cd "$d" && env "${env[@]+"${env[@]}"}" "$SKILL/scripts/fires.sh" write-great-skill "${yes[@]}") | sed 's/^/  /'
-    echo "  -- should not fire:"
-    (cd "$d" && env "${env[@]+"${env[@]}"}" "$SKILL/scripts/fires.sh" write-great-skill "${no[@]}") | sed 's/^/  /'
+    (cd "$d" && env "${env[@]+"${env[@]}"}" "$SKILL/scripts/fires.sh" write-great-skill "${yes[@]}" --not "${no[@]}") | sed 's/^/  /' || true
   done
 }
 
