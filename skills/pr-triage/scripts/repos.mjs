@@ -42,14 +42,23 @@ export const firstLine = (s) => String(s ?? "").trim().split("\n").find((l) => l
 // A bad or unsupported entry keeps its text and carries the reason in `error`.
 export function parseRepoEntry(text) {
   const s = String(text ?? "").trim();
+  if (!s) return { id: "(empty entry)", host: null, path: null, error: `empty — write "github:<owner>/<repo>"` };
+  // Common slips get the entry they meant: a URL, "gh:", a bare owner/repo.
+  const url = s.match(/^https?:\/\/(?:www\.)?github\.com\/([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/i);
+  if (url) return { id: s, host: null, path: null, error: `did you mean "github:${url[1]}"?` };
   const m = s.match(/^([A-Za-z][\w-]*):(.+)$/);
-  if (!m) return { id: s, host: null, path: null, error: `expected "<host>:<path>", e.g. "github:owner/repo"` };
+  if (!m) {
+    const bare = /^[\w.-]+\/[\w.-]+$/.test(s) ? ` — did you mean "github:${s}"?` : `, e.g. "github:owner/repo"`;
+    return { id: s, host: null, path: null, error: `expected "<host>:<path>"${bare}` };
+  }
   const host = m[1].toLowerCase();
-  const path = m[2].trim().replace(/^\/+|\/+$/g, "");
+  let path = m[2].trim().replace(/^\/+|\/+$/g, "");
+  // GitHub owner and repo names ignore case: one repo, one id, one cache folder.
+  if (host === "github") path = path.toLowerCase();
   const id = `${host}:${path}`;
   if (NOT_YET[host]) return { id, host, path, error: `${NOT_YET[host]} is not supported yet` };
   const spec = HOSTS[host];
-  if (!spec) return { id, host, path, error: `unknown host "${host}" — use github:` };
+  if (!spec) return { id, host, path, error: `unknown host "${host}" — ${host === "gh" ? `did you mean "github:${path}"?` : "use github:"}` };
   const parts = path.split("/");
   // Each part becomes a folder of the cache, so "." and ".." are refused.
   if (parts.length !== spec.parts || parts.some((p) => !p.trim() || p === "." || p === ".." || /[\\\x00-\x1f]/.test(p))) {
@@ -63,8 +72,10 @@ export function parseRepoEntry(text) {
 export function loadRepoList(home = homedir()) {
   const path = listPath(home);
   if (!existsSync(path)) return null;
+  const text = readFileSync(path, "utf8");
+  if (!text.trim()) return { path, repos: [] };
   let data;
-  try { data = parseJsonc(readFileSync(path, "utf8")); }
+  try { data = parseJsonc(text); }
   catch (e) { throw new Error(`${path}: not valid JSONC — ${e.message}`); }
   if (!Array.isArray(data?.repos) || data.repos.some((r) => typeof r !== "string")) {
     throw new Error(`${path}: expected { "repos": ["github:owner/repo", ...] }`);
@@ -74,9 +85,10 @@ export function loadRepoList(home = homedir()) {
   for (const text of data.repos) {
     const e = parseRepoEntry(text);
     if (repos.some((r) => r.id === e.id)) continue;
-    let slug = String(e.path ?? e.id).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "repo";
-    if (slugs.has(slug)) slug = `${e.host ?? "x"}-${slug}`;
-    slugs.add(slug);
+    const base = String(e.path ?? e.id).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "repo";
+    let slug = base;
+    for (let i = 2; slugs.has(slug.toLowerCase()); i++) slug = `${base}-${i}`;
+    slugs.add(slug.toLowerCase()); // case-insensitive file systems: "A-b" and "a-b" are one file
     repos.push({ ...e, slug });
   }
   return { path, repos };
@@ -84,18 +96,20 @@ export function loadRepoList(home = homedir()) {
 
 // One row per repo: { ...entry, tool, ready, status }. In order: git and the
 // host's tool installed? logged in? can this login read the repo?
-export function preflight(entries, { run: exec = run } = {}) {
+export function preflight(entries, { run: exec = run, env = process.env } = {}) {
   const seen = new Map();
   const once = (key, fn) => { if (!seen.has(key)) seen.set(key, fn()); return seen.get(key); };
-  return entries.map((e) => ({ ...e, ...checkOne(e, exec, once) }));
+  return entries.map((e) => ({ ...e, ...checkOne(e, exec, once, env) }));
 }
 
-const CANNOT_READ = "your login can't read this repo; ask for read access";
-// gh says "Could not resolve to a Repository" for a repo the login cannot see: that is not the network.
-const NETWORK = /could not resolve host|no such host|timed? ?out|network is unreachable|ENOTFOUND|ECONNRESET|connection (refused|reset)/i;
+// GitHub answers "not found" both for a repo that does not exist and for a
+// private one this login cannot see, so the message names both.
+const CANNOT_READ = "not found — check the spelling; if it is private, your login can't read this repo; ask for read access";
+// gh says "Could not resolve to a Repository" for that case: that is not the network.
+const NETWORK = /error connecting to|could not resolve host|no such host|timed? ?out|network is unreachable|ENOTFOUND|ECONNRESET|connection (refused|reset)/i;
 const cannotRead = (r) => (NETWORK.test(r.stderr) ? `network error: ${firstLine(r.stderr)}` : CANNOT_READ);
 
-function checkOne(e, exec, once) {
+function checkOne(e, exec, once, env) {
   if (e.error) return { tool: HOSTS[e.host]?.tool ?? "—", ready: false, status: e.error };
   const tool = HOSTS[e.host].tool;
   const fail = (status) => ({ tool, ready: false, status });
@@ -107,7 +121,11 @@ function checkOne(e, exec, once) {
     const r = exec("gh", ["auth", "status", "--active", "--hostname", "github.com"]);
     return /unknown flag/.test(r.stderr) ? exec("gh", ["auth", "status", "--hostname", "github.com"]) : r;
   });
-  if (!auth.ok) return fail("not logged in — run: gh auth login");
+  if (!auth.ok) {
+    // gh prefers a token in the environment over its own login; `gh auth login` cannot fix a bad one.
+    const envToken = ["GH_TOKEN", "GITHUB_TOKEN"].find((k) => env[k]);
+    return fail(envToken ? `${envToken} is set but not valid — unset it or replace it` : "not logged in — run: gh auth login");
+  }
   const r = exec("gh", ["repo", "view", e.path, "--json", "nameWithOwner"]);
   return r.ok ? { tool, ready: true, status: "ready" } : fail(cannotRead(r));
 }

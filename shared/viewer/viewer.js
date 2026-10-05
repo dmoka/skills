@@ -117,7 +117,8 @@
       current = key;
       if (r.pr && DATA.tours?.[r.pr]) app.innerHTML = renderTour(DATA.tours[r.pr], r.pr);
       else app.innerHTML = DATA.triage ? renderQueue(DATA.triage) : `<div class="main"><p class="empty">Nothing to show.</p></div>`;
-      document.title = r.pr && DATA.tours?.[r.pr] ? `#${DATA.tours[r.pr].pr.number} · ${DATA.tours[r.pr].pr.title}` : `Triage · ${repoLabel(DATA.triage)}`;
+      const tour = r.pr && DATA.tours?.[r.pr];
+      document.title = tour ? `${tour.read ? `${tour.repo}` : ""}#${tour.pr.number} · ${tour.pr.title}` : `Triage · ${repoLabel(DATA.triage)}`;
       wire();
       if (!r.at) window.scrollTo(0, 0);
     }
@@ -137,7 +138,12 @@
   // and each row carries its repo.
   const keyOf = (p) => String(p.key ?? p.number);
   const prHref = (p) => `#/pr/${encodeURIComponent(keyOf(p))}`;
-  const repoLabel = (t) => t?.repo ?? (t?.repos ? plural(t.repos.length, "repo") : "");
+  // Many repos: count the triaged ones; the others are counted apart.
+  const repoLabel = (t) => {
+    if (t?.repo || !t?.repos) return t?.repo ?? "";
+    const off = t.repos.filter((r) => !r.ready).length;
+    return plural(t.repos.length - off, "repo") + (off ? ` · ${off} not triaged` : "");
+  };
   let repoFilter = "";
   function renderQueue(t) {
     const prs = t.prs;
@@ -161,7 +167,7 @@
   </td>
   <td class="r num">${fmt(p.readLines)}<div style="color:var(--dim);white-space:nowrap">${p.noiseLines ? `+${fmt(p.noiseLines)} noise` : plural(p.filesChanged, "file")}</div></td>
   <td class="r num">${age(p.ageDays)}</td>
-  <td class="r">${has ? `<a class="go go-tour" href="#/pr/${p.number}">Tour →</a>` : ""}</td>
+  <td class="r">${has ? `<a class="go go-tour" href="${prHref(p)}">Tour →</a>` : ""}</td>
 </tr>`;
     }).join("");
     const byKey = new Map(prs.map((p) => [keyOf(p), p]));

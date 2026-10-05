@@ -8,7 +8,7 @@
 // the refs of PRs that closed, updates the default branch, and downloads the
 // files at every fetched head in one batch, so reads stay offline and fast.
 
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { run as defaultRun, firstLine } from "./repos.mjs";
@@ -30,16 +30,64 @@ export function cacheGit(dir, args, { run = defaultRun, env, input } = {}) {
   return r.stdout;
 }
 
-// Brings the cache of one repo up to date with its open PRs.
+// Brings the cache of one repo up to date with its open PRs. One run at a
+// time per repo (a lock beside the cache). A broken cache is deleted and
+// cloned again once: it holds nothing that cannot be fetched again.
 // Returns { dir, failed: Map<number, reason>, read(ref, path) }.
-export function syncCache({ entry, info, prs, adapter, home, run = defaultRun }) {
+export function syncCache(opts) {
+  const { entry, info, home, run = defaultRun } = opts;
   const dir = cacheDirOf(entry, home);
+  if (!info.defaultBranch) throw new Error(`${entry.id}: the host reports no default branch (an empty repo?)`);
+  mkdirSync(dirname(dir), { recursive: true });
+  return withLock(`${dir}.lock`, () => {
+    if (existsSync(dir) && !healthy(dir, run)) {
+      console.error(`${entry.id}: the cache is broken; deleting it and cloning again`);
+      rmSync(dir, { recursive: true, force: true });
+    }
+    try { return syncOnce(opts, dir); }
+    catch (e) { throw new Error(`${e.message} — if it keeps failing, run: node scripts/triage.mjs --clean-cache ${entry.id}`); }
+  });
+}
+
+// Readable config, readable refs, and the commit HEAD names is present.
+function healthy(dir, run) {
+  const ok = (args) => run("git", ["--git-dir", dir, ...args], { env: gitEnv() }).ok;
+  return existsSync(join(dir, "HEAD")) && ok(["config", "--get", "remote.origin.url"]) && ok(["for-each-ref", "--count=1"])
+    && ok(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]);
+}
+
+// mkdir is atomic: whoever creates the folder holds the lock. A lock whose
+// process is gone, or older than 30 minutes, is taken over.
+function withLock(lock, fn, { waitMs = 10 * 60 * 1000, staleMs = 30 * 60 * 1000 } = {}) {
+  const start = Date.now();
+  const nap = new Int32Array(new SharedArrayBuffer(4));
+  for (;;) {
+    try { mkdirSync(lock); writeFileSync(join(lock, "pid"), String(process.pid)); break; }
+    catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      if (lockIsStale(lock, staleMs)) { rmSync(lock, { recursive: true, force: true }); continue; }
+      if (Date.now() - start > waitMs) throw new Error(`another pr-triage run holds ${lock}; if none is running, delete that folder`);
+      Atomics.wait(nap, 0, 0, 250);
+    }
+  }
+  try { return fn(); } finally { rmSync(lock, { recursive: true, force: true }); }
+}
+
+function lockIsStale(lock, staleMs) {
+  try {
+    if (Date.now() - statSync(lock).mtimeMs > staleMs) return true;
+    const pid = Number(readFileSync(join(lock, "pid"), "utf8"));
+    if (!pid) return false; // the owner has not written its pid yet
+    try { process.kill(pid, 0); return false; } catch (e) { return e.code === "ESRCH"; }
+  } catch { return false; }
+}
+
+function syncOnce({ entry, info, prs, adapter, run = defaultRun }, dir) {
   const env = adapter.gitEnv?.() ?? {};
   const git = (args, opts = {}) => cacheGit(dir, args, { run, env, ...opts });
-  if (!info.defaultBranch) throw new Error(`${entry.id}: the host reports no default branch (an empty repo?)`);
 
   if (!existsSync(join(dir, "HEAD"))) {
-    mkdirSync(dirname(dir), { recursive: true });
+    rmSync(dir, { recursive: true, force: true }); // a clone that died half way
     cacheGit(null, ["clone", "--bare", "--quiet", "--filter=blob:none", "--no-tags", "--single-branch", "--branch", info.defaultBranch, info.remoteUrl, dir], { run, env });
     for (const [k, v] of adapter.gitConfig ?? []) git(["config", "--add", k, v]);
   }

@@ -1,13 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, readdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseRepoEntry, loadRepoList, preflight, formatTable } from "../skills/pr-triage/scripts/repos.mjs";
 import { adapterFor } from "../skills/pr-triage/scripts/hosts.mjs";
 import { syncCache, cleanCache, cacheDirOf, prRef } from "../skills/pr-triage/scripts/cache.mjs";
+import { readCommands } from "../skills/pr-triage/scripts/build.mjs";
 
 const SCRIPTS = fileURLToPath(new URL("../skills/pr-triage/scripts/", import.meta.url));
 const tmp = () => mkdtempSync(join(tmpdir(), "pr-triage-"));
@@ -22,7 +23,12 @@ test("repo entries: github parses; gitlab and azure are not supported yet; unkno
   assert.match(parseRepoEntry("github:only-owner").error, /expected github:<owner>\/<repo>/);
   assert.match(parseRepoEntry("github:a/b/c").error, /expected github:<owner>\/<repo>/);
   assert.match(parseRepoEntry("github:../etc").error, /expected/);
-  assert.match(parseRepoEntry("dmoka/ticket-bay").error, /expected "<host>:<path>"/);
+  assert.equal(parseRepoEntry("dmoka/ticket-bay").error, 'expected "<host>:<path>" — did you mean "github:dmoka/ticket-bay"?');
+  // GitHub names ignore case: one id, one cache folder.
+  assert.equal(parseRepoEntry("GITHUB:DMoka/Ticket-Bay").id, "github:dmoka/ticket-bay");
+  assert.equal(parseRepoEntry("https://github.com/dmoka/ticket-bay.git").error, 'did you mean "github:dmoka/ticket-bay"?');
+  assert.equal(parseRepoEntry("gh:dmoka/x").error, 'unknown host "gh" — did you mean "github:dmoka/x"?');
+  assert.equal(parseRepoEntry("  ").id, "(empty entry)");
 });
 
 test("repo list: none -> null; JSONC with comments, trailing commas and duplicates; slugs stay unique", () => {
@@ -30,16 +36,18 @@ test("repo list: none -> null; JSONC with comments, trailing commas and duplicat
   assert.equal(loadRepoList(home), null);
   mkdirSync(join(home, ".config", "pr-triage"), { recursive: true });
   const file = join(home, ".config", "pr-triage", "repos.jsonc");
-  writeFileSync(file, `// mine\n{ "repos": [\n "github:dmoka/ticket-bay", // public\n "github:dmoka/ticket-bay",\n "github:dmoka-ticket/bay",\n "gitlab:x/y",\n ],\n}\n`);
+  writeFileSync(file, `// mine\n{ "repos": [\n "github:dmoka/ticket-bay", // public\n "github:DMOKA/Ticket-Bay",\n "github:dmoka-ticket/bay",\n "gitlab:x/y",\n ],\n}\n`);
   const list = loadRepoList(home);
   assert.equal(list.path, file);
   assert.deepEqual(list.repos.map((r) => [r.id, r.slug, !r.error]), [
     ["github:dmoka/ticket-bay", "dmoka-ticket-bay", true],
-    ["github:dmoka-ticket/bay", "github-dmoka-ticket-bay", true], // same slug as above: the host goes in front
+    ["github:dmoka-ticket/bay", "dmoka-ticket-bay-2", true], // same slug as above: a number goes after
     ["gitlab:x/y", "x-y", false],
   ]);
   writeFileSync(file, `["github:a/b"]`);
   assert.throws(() => loadRepoList(home), /expected \{ "repos"/);
+  writeFileSync(file, "  \n");
+  assert.deepEqual(loadRepoList(home).repos, [], "an empty file is an empty list");
 });
 
 // A fake runner: each command line maps to a result; anything unlisted fails.
@@ -61,13 +69,15 @@ test("preflight: install link, login command, read access, ready — in that ord
   assert.equal(preflight(entries("github:a/b"), { run: missingGh.exec })[0].status, "gh not installed — install: https://cli.github.com");
 
   const loggedOut = fakeRun([GIT_OK, [/^gh --version/, {}], [/^gh auth status/, { ok: false, stderr: "You are not logged into any GitHub hosts." }]]);
-  assert.equal(preflight(entries("github:a/b"), { run: loggedOut.exec })[0].status, "not logged in — run: gh auth login");
+  assert.equal(preflight(entries("github:a/b"), { run: loggedOut.exec, env: {} })[0].status, "not logged in — run: gh auth login");
+  // gh login cannot fix a bad token in the environment.
+  assert.equal(preflight(entries("github:a/b"), { run: loggedOut.exec, env: { GH_TOKEN: "bad" } })[0].status, "GH_TOKEN is set but not valid — unset it or replace it");
 
   const gh = fakeRun([GIT_OK, [/^gh --version/, {}], [/^gh auth status --active/, {}], [/^gh repo view a\/public/, {}]]);
   const rows = preflight(entries("github:a/public", "github:a/private", "gitlab:x/y"), { run: gh.exec });
   assert.deepEqual(rows.map((r) => [r.ready, r.status]), [
     [true, "ready"],
-    [false, "your login can't read this repo; ask for read access"],
+    [false, "not found — check the spelling; if it is private, your login can't read this repo; ask for read access"],
     [false, "GitLab is not supported yet"],
   ]);
   // The tool and login checks run once, however many repos share them.
@@ -80,7 +90,7 @@ test("preflight: install link, login command, read access, ready — in that ord
 
   // gh's real answer for a repo the login cannot see (private, or no such repo).
   const hidden = fakeRun([GIT_OK, [/^gh --version/, {}], [/^gh auth status/, {}], [/^gh repo view/, { ok: false, stderr: "GraphQL: Could not resolve to a Repository with the name 'a/b'. (repository)" }]]);
-  assert.equal(preflight(entries("github:a/b"), { run: hidden.exec })[0].status, "your login can't read this repo; ask for read access");
+  assert.equal(preflight(entries("github:a/b"), { run: hidden.exec })[0].status, "not found — check the spelling; if it is private, your login can't read this repo; ask for read access");
 
   const net = fakeRun([GIT_OK, [/^gh --version/, {}], [/^gh auth status/, {}], [/^gh repo view/, { ok: false, stderr: "error connecting to api.github.com: dial tcp: lookup api.github.com: no such host — could not resolve" }]]);
   assert.match(preflight(entries("github:a/b"), { run: net.exec })[0].status, /^network error/);
@@ -165,6 +175,56 @@ test("cache: bare partial clone, heads in refs/pr-triage/pr/<n>, prune on rerun,
   assert.throws(() => cleanCache({ entry: { host: "github", path: "../../x" }, home }), /refusing/);
 });
 
+test("cache: a broken cache is deleted and cloned again", () => {
+  const root = tmp();
+  const home = join(root, "home");
+  const url = makeOrigin(join(root, "origin"));
+  const entry = parseRepoEntry("github:acme/shop");
+  const args = { entry, info: { defaultBranch: "main", remoteUrl: url }, prs: [{ number: 5, baseRefName: "main", headRef: "refs/pull/7/head" }], adapter: { gitEnv: () => ({}), gitConfig: [] }, home };
+  const dir = syncCache(args).dir;
+  const breakers = {
+    "garbage HEAD": () => writeFileSync(join(dir, "HEAD"), "garbage\n"),
+    "bad config": () => writeFileSync(join(dir, "config"), "[[[x\n"),
+    "no objects": () => rmSync(join(dir, "objects"), { recursive: true, force: true }),
+    "bad packed-refs": () => { execFileSync("git", ["--git-dir", dir, "pack-refs", "--all"]); writeFileSync(join(dir, "packed-refs"), "zzzz\n"); },
+  };
+  for (const [name, breakIt] of Object.entries(breakers)) {
+    breakIt();
+    const c = syncCache(args);
+    assert.match(c.read(prRef(5), "src/price.ts"), /Math.round/, name);
+  }
+  assert.ok(!existsSync(`${dir}.lock`), "the lock is released");
+});
+
+test("cache: runs at once on a fresh cache wait for each other; a dead run's lock is taken over", async () => {
+  const root = tmp();
+  const home = join(root, "home");
+  const url = makeOrigin(join(root, "origin"));
+  const script = join(root, "sync.mjs");
+  writeFileSync(script, `import { syncCache } from ${JSON.stringify(join(SCRIPTS, "cache.mjs"))};
+import { parseRepoEntry } from ${JSON.stringify(join(SCRIPTS, "repos.mjs"))};
+const c = syncCache({ entry: parseRepoEntry("github:acme/shop"), home: ${JSON.stringify(home)}, info: { defaultBranch: "main", remoteUrl: ${JSON.stringify(url)} },
+  prs: [{ number: 5, baseRefName: "main", headRef: "refs/pull/7/head" }], adapter: { gitEnv: () => ({}), gitConfig: [] } });
+console.log(c.read("refs/pr-triage/pr/5", "src/price.ts") ? "ok" : "missing");`);
+  const { spawn } = await import("node:child_process");
+  const once = () => new Promise((resolve) => {
+    const p = spawn(process.execPath, [script], { encoding: "utf8" });
+    let out = "", err = "";
+    p.stdout.on("data", (d) => (out += d));
+    p.stderr.on("data", (d) => (err += d));
+    p.on("close", (code) => resolve({ code, out: out.trim(), err }));
+  });
+  const results = await Promise.all([once(), once(), once()]);
+  for (const r of results) assert.deepEqual([r.code, r.out], [0, "ok"], r.err);
+
+  // A lock left by a process that died: taken over, not waited on.
+  const dir = cacheDirOf(parseRepoEntry("github:acme/shop"), home);
+  mkdirSync(`${dir}.lock`);
+  writeFileSync(join(`${dir}.lock`, "pid"), "999999");
+  const r = await once();
+  assert.deepEqual([r.code, r.out], [0, "ok"], r.err);
+});
+
 function annotate(dir, notes) {
   writeFileSync(join(dir, "triage.notes.json"), JSON.stringify(notes));
   return spawnSync(process.execPath, [join(SCRIPTS, "annotate.mjs"), join(dir, "triage.json"), join(dir, "triage.notes.json")], { encoding: "utf8" });
@@ -235,7 +295,7 @@ process.stderr.write("GraphQL: Could not resolve to a Repository (" + line + ")\
   const r = spawnSync(process.execPath, [join(SCRIPTS, "triage.mjs")], { cwd: work, env, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr + r.stdout);
   assert.match(r.stdout, /github:acme\/shop\s+github\s+gh\s+ready/);
-  assert.match(r.stdout, /github:acme\/secret\s+github\s+gh\s+your login can't read this repo; ask for read access/);
+  assert.match(r.stdout, /github:acme\/secret\s+github\s+gh\s+not found — check the spelling; if it is private, your login can't read this repo/);
   assert.match(r.stdout, /gitlab:x\/y\s+gitlab\s+—\s+GitLab is not supported yet/);
   assert.match(r.stdout, /azure:a\/b\/c\s+azure\s+—\s+Azure DevOps is not supported yet/);
 
@@ -261,4 +321,28 @@ process.stderr.write("GraphQL: Could not resolve to a Repository (" + line + ")\
   const calls = readFileSync(log, "utf8").trim().split("\n");
   assert.ok(calls.every((c) => /^(--version|auth status --active|repo view|pr list|issue view)\b/.test(c)), calls.join("\n"));
   assert.ok(readdirSync(work).every((f) => f === ".pr-review"), "nothing else is written to the working folder");
+});
+
+test("a broken repo list: one line, exit 1, no stack trace", () => {
+  const home = tmp();
+  mkdirSync(join(home, ".config", "pr-triage"), { recursive: true });
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  for (const text of ['{ "repos": [ "github:dmoka/ticket-bay" ', '["github:dmoka/ticket-bay"]', '{"repos":[42]}']) {
+    writeFileSync(join(home, ".config", "pr-triage", "repos.jsonc"), text);
+    for (const script of ["triage.mjs", "preflight.mjs"]) {
+      const r = spawnSync(process.execPath, [join(SCRIPTS, script)], { cwd: home, env, encoding: "utf8" });
+      assert.equal(r.status, 1, `${script}: ${text}`);
+      assert.equal(r.stderr.trim().split("\n").length, 1, r.stderr);
+      assert.match(r.stderr, /repos\.jsonc: (not valid JSONC|expected \{ "repos")/);
+    }
+  }
+});
+
+test("viewer: every queue link uses the PR key; read commands survive odd home folders", () => {
+  const viewer = readFileSync(join(SCRIPTS, "viewer", "viewer.js"), "utf8");
+  assert.doesNotMatch(viewer, /href="#\/pr\/\$\{p\.number\}"/);
+  // Pasted into a shell, the cache path stays one argument, even with ', $ and ` in it.
+  const show = readCommands({ gitDir: "/home/o'neil/$HOME/`x`", base: "refs/heads/main", head: "refs/pr-triage/pr/7" }).show;
+  const args = execFileSync("sh", ["-c", show.replace(/^git /, "printf '%s|' ").replace("<path>", "src/a.ts")], { encoding: "utf8" });
+  assert.equal(args, "--git-dir|/home/o'neil/$HOME/`x`|show|refs/pr-triage/pr/7:src/a.ts|");
 });

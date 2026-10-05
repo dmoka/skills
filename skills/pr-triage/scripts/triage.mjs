@@ -40,7 +40,9 @@ if (args["clean-cache"]) {
   process.exit(0);
 }
 
-const list = args.repo ? null : loadRepoList();
+let list;
+try { list = args.repo ? null : loadRepoList(); }
+catch (e) { console.error(e.message); process.exit(1); } // a broken list: one line, no stack
 const queue = list ? triageMany(list) : triageOne();
 if (!queue) process.exit(0);
 

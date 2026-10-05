@@ -13,7 +13,9 @@ import { loadRepoList, parseRepoEntry, preflight, formatTable, run, firstLine } 
 
 const args = parseArgs(process.argv.slice(2));
 let entries;
-const list = args.repo ? null : loadRepoList();
+let list;
+try { list = args.repo ? null : loadRepoList(); }
+catch (e) { console.error(e.message); process.exit(1); }
 if (list) {
   console.log(`repo list: ${list.path}`);
   entries = list.repos;
