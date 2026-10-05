@@ -10,7 +10,10 @@ config file yourself from the snippets below.
 
 These tools drop output into the repo: `mutants/`, `.stryker-tmp/`,
 `reports/`, `StrykerOutput/`, `target/pit-reports/`, `mutants.out/`,
-`infection.log`. Gitignore or delete all of it before reporting.
+`infection.log`. Prefer a console-only run that writes none of it (StrykerJS
+can: `--reporters clear-text`). For the tools that always write it, delete it with one
+`rm -rf <dir>` call before reporting; if the harness refuses the delete,
+name the folder in the report's files line.
 
 Version numbers and flags drift. If a command below fails, check the tool's
 current docs before improvising — do not switch tools because one flag moved.
@@ -18,6 +21,29 @@ To confirm a current version, read the registry's own metadata (Maven
 Central's `maven-metadata.xml`, `npm view <pkg> version`, the NuGet flat
 index) — search-endpoint results are ranked, not sorted by release, and will
 hand you a stale number.
+
+## Excluding an approved equivalent
+
+Only after the user approved the claim (SKILL.md step 9). Put the reason in
+the comment: it is the record of what the judge tried and who approved it.
+
+| Tool | Narrowest exclusion |
+|---|---|
+| StrykerJS | `// Stryker disable next-line EqualityOperator: equivalent, judged and approved — <reason>` on the line above |
+| Stryker.NET | `// Stryker disable once Equality : equivalent, judged and approved — <reason>` on the line above |
+| mutmut | `# pragma: no mutate` at the end of the line; the reason in a comment on the line above |
+| Infection | `/** @infection-ignore-all */` docblock above the statement; the reason inside the docblock |
+| Pitest | no line comment: an annotation named `@DoNotMutate` on the method excludes the whole method |
+| cargo-mutants | no line comment: `#[mutants::skip]` on the function (needs the `mutants` crate as a dependency) excludes the whole function |
+
+- Stryker's comment disables every mutant of that mutator on the line, not
+  only the equivalent one. `fee < 100` has two EqualityOperator mutants:
+  `<=` may be equivalent while `>=` is killable. Tell the user which killed
+  mutants the comment also switches off, and name the line in the report.
+- Pitest and cargo-mutants exclude a whole method or function. Say so when
+  you ask for approval: the user approves a wider hole than one line.
+- Syntax drifts: if the tool still reports the mutant after the comment,
+  check its current docs before trying variants.
 
 ## JavaScript / TypeScript — StrykerJS
 
@@ -35,20 +61,25 @@ interactive wizard):
   "mutate": ["src/billing/refund.ts"],
   "coverageAnalysis": "perTest",
   "ignorePatterns": ["coverage", "reports", "test-results"],
-  "reporters": ["html", "clear-text", "progress"]
+  "reporters": ["clear-text"]
 }
 ```
 
-Scoped first run:
+Scoped first run, console only (the project's config may list `html` or
+`json` reporters, which write `reports/`; the flag overrides them):
 
 ```bash
-npx stryker run
+npx stryker run --mutate src/billing/refund.ts --reporters clear-text
 ```
+
+`clear-text` prints every survivor with its diff and the score table.
+Stryker deletes its `.stryker-tmp/` sandbox after a successful run.
 
 - `"coverageAnalysis": "perTest"` is a large speedup — keep it. Keep
   generated folders in `ignorePatterns`: Stryker copies the project into a
   sandbox, and a concurrent process writing those folders crashes the copy.
-- Report: `reports/mutation/mutation.html` plus console summary.
+- With the `html` reporter: `reports/mutation/mutation.html`. Delete
+  `reports/` before reporting.
 - Later runs: widen the `mutate` globs; `--incremental` reuses previous
   results and only retests what changed.
 

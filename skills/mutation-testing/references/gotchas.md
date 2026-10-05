@@ -29,10 +29,15 @@ that some test actually reaches it.
 ## Equivalent mutants
 
 Some mutants change the code without changing behavior (`i < len` vs
-`i != len` on a loop that only counts up). No test can kill them. Prove
-equivalence, label it, move on — do not write tests chasing them.
+`i != len` on a loop that only counts up). No test can kill them. The agent
+that ran the tool does not get to say which ones these are: it writes a
+claim, a fresh judge tries to kill the mutant
+([judge.md](judge.md)), and only a claim that survives the judge goes to the
+user for an exclusion. An agent that wants a green gate calls hard mutants
+equivalent; every one it gets wrong is a hole in the tests hidden behind an
+exclusion comment.
 
-Two traps when proving equivalence:
+Two traps when writing a claim:
 
 - **Use the language's strictest equality.** In JavaScript, `-0 !== 0` is
   `false`, so a differential check built on `!==` is blind to signed zero —
@@ -42,7 +47,11 @@ Two traps when proving equivalence:
 - **Say which kind of equivalent it is.** Equivalent *in isolation* (no input
   can distinguish it) is a stronger claim than equivalent *in context*
   (distinguishable, but unreachable given every current caller). The second
-  kind stops being equivalent when a new caller appears — label it so.
+  kind stops being equivalent when a new caller appears. On an exported
+  function it is no claim at all: a test can call the export with the
+  distinguishing input, so the mutant is killable. Verified: a refund fee
+  function capped at the refund looked equivalent because its only caller
+  clamps the net amount at zero; `refundFee(30)` returns 50 under the mutant.
 
 ## Timeouts scored as kills
 

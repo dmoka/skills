@@ -13,10 +13,8 @@ that stays green let the bug through — every surviving mutant is a lie the
 test suite tells.
 
 Reference files sit beside this file. If you fetched this over HTTP instead of
-from disk, fetch them from
-`https://raw.githubusercontent.com/dmoka/skills/main/skills/mutation-testing/references/tools.md`
-and
-`https://raw.githubusercontent.com/dmoka/skills/main/skills/mutation-testing/references/gotchas.md`.
+from disk, fetch `tools.md`, `gotchas.md` and `judge.md` from
+`https://raw.githubusercontent.com/dmoka/skills/main/skills/mutation-testing/references/`.
 
 **Fetch raw text, not a summary.** Many agents have a fetch tool that runs a
 page through a summarizing model. It will paraphrase this file, drop the
@@ -32,11 +30,10 @@ fetch returns prose rather than the literal markdown below, refetch with
    noise. Quarantine it (skip it, with a comment saying why and what a human
    must decide) unless you can see the actual defect and the fix is in the
    test — never invent a spec to "fix" a test toward. If the only tests are
-   e2e/CI-only, or the suite takes
-   more than a few minutes locally, report BLOCKED too — mutation testing
-   needs a fast local unit suite, and that gap is the finding. In a monorepo,
-   work inside the package that owns the target module. Never exclude a
-   failing test to get a number.
+   e2e/CI-only, or the suite takes more than a few minutes locally, report
+   BLOCKED too — mutation testing needs a fast local unit suite, and that gap
+   is the finding. In a monorepo, work inside the package that owns the
+   target module. Never exclude a failing test to get a number.
 2. **Pick the tool** for the stack (table below). Install it project-local
    and configure it per [references/tools.md](references/tools.md) — never
    run a tool's interactive init wizard; write the config file yourself. Ask
@@ -48,26 +45,57 @@ fetch returns prose rather than the literal markdown below, refetch with
    the logic where a silent bug costs the most is the file to start on. Say
    which file you chose and why. A whole-repo first run on a real codebase
    takes hours and often dies; a one-module run finishes in minutes and
-   proves the point. Widen the scope
-   only after the first run succeeds. On a project small enough that one
-   module *is* the whole codebase, say so and move on — do not invent a
-   narrower scope to satisfy this step.
-4. **Run** the tool and parse the report.
+   proves the point. Widen the scope only after the first run succeeds. On a
+   project small enough that one module *is* the whole codebase, say so and
+   move on — do not invent a narrower scope to satisfy this step.
+4. **Run** the tool with console output only, so the run leaves no report
+   files on disk (the flag per tool is in
+   [references/tools.md](references/tools.md)), and read the survivors from
+   the console.
 5. **Explain every surviving mutant** in one sentence a non-tester
-   understands: what the mutant changed, why the suite stayed green, and what
-   real-world bug that blind spot allows. Example: "`Math.round` became
-   `Math.floor` and no test noticed — the suite never checks cents, so a
-   customer can be short-changed on every refund."
+   understands: what the mutant changed, and one concrete input with the
+   wrong output it allows. Example: "the 2000-cent cap was deleted: a €1,000
+   order pays a €30 fee instead of the €20 cap." Keep the numbers; "large
+   orders are overcharged" tells the reader nothing to check.
 6. **Rank survivors by blast radius**: money and data-loss paths first,
    boundary conditions next, logging and formatting last.
-7. **Separate killable from equivalent.** For each killable survivor, write
-   the killing test and rerun the tool to confirm the kill. For equivalents:
-   prove it, label it, move on — traps in
-   [references/gotchas.md](references/gotchas.md).
-8. **Report**, in this order: score; ranked survivors with their
-   one-sentence lies; equivalents with proofs; tests added, each with its
-   confirmed kill; what the score cannot see (below); every file you added
-   or changed, including tool output you cleaned up.
+7. **Kill or claim.** For each killable survivor, write a test that asserts
+   a business outcome and rerun the tool to confirm the kill. For a survivor
+   you cannot kill, never label it equivalent yourself — the agent that wants
+   the gate green is the one most likely to call a killable mutant
+   unkillable. Write a claim instead: why no input can tell mutant and
+   original apart, in isolation or only in context
+   ([references/gotchas.md](references/gotchas.md)).
+8. **Judge each claim in its own fresh agent**, one judge per claim. Use a
+   Claude Code subagent (the Agent tool), another harness's subagent or
+   delegate tool, or else a new session; never judge in your own context.
+   Pass it [references/judge.md](references/judge.md) verbatim plus only the
+   original line and its function, the mutant, the claim, and the test
+   command. Start every judge at once and wait for all verdicts. A judge
+   finds an input that kills: the claim is rejected; keep its test and rerun
+   the tool to confirm the kill. It finds none within the brief's bounds:
+   the claim stands, marked "judged: no distinguishing input found".
+9. **Ask once before excluding.** List every standing claim with its judge
+   note, and ask the user once to approve the exclusions. Only after a yes,
+   add the tool's exclusion comment with the reason on each line (syntax per
+   tool in [references/tools.md](references/tools.md)). Never write an
+   exclusion without that yes. Nobody to ask (a non-interactive run, CI):
+   write no exclusion comments, report the standing claims as open
+   decisions, and leave the gate red.
+10. **Report, result first**, in at most 200 words:
+    - One line: the score with the tool's name, then "N killed, M need your
+      approval".
+    - A table, one row per survivor: the mutant (`file:line`, original →
+      mutant) · what changed, as the concrete input and wrong output from
+      step 5 · **Killed** (the new test's name) or **Needs your approval**
+      (the judge's verdict in a few words). One short clause per cell.
+    - The approval question from step 9, in one or two sentences; or "open
+      decision" when nobody can answer.
+    - One sentence: what the score cannot see (below). One sentence: files
+      added or changed, and any tool output left on disk.
+
+    Nothing else: no setup story, no baseline narrative unless it was
+    BLOCKED or flaky, no list of inputs the judge tried.
 
 ## Tools by stack
 
@@ -100,12 +128,18 @@ Setup, config, and scoped-run commands for each: [references/tools.md](reference
   file, widen or remove that scope when you finish — a leftover narrow scope
   is an inherited exclusion for the next person.
 - **Production source is read-only.** Tests, build files, and tool config are
-  yours to add and change — the report lists every file you touched. If
+  yours to add and change — the report lists every file you touched. The one
+  source edit allowed is an exclusion comment the user approved in step 9. If
   killing a mutant would require a source change, that is a finding to
   report, not an edit to make. Where a language keeps unit tests inside the
   source file (Rust's `#[cfg(test)] mod tests`, Python doctests), you may add
   tests to that file — never touch the code above them, and say in the report
   that you edited a source file and why.
+- **One command per shell call.** No `for` loops, `&&` chains, `;`
+  sequences or pipes into `tail`: a harness that allowlists commands asks
+  for permission on every compound command, and a non-interactive run is
+  refused. Run the baseline twice as two calls; read long output from the
+  tool's own summary.
 - **Stay inside the repo.** Scratch scripts, downloaded copies of this skill,
   and equivalence checks belong in the project's own ignored scratch space or
   your agent workspace — not a sibling directory, not the system temp dir. Do
@@ -127,14 +161,16 @@ of an untested off-by-one. Report the score with the tool's name and its
 known blind spots, never as a bare percentage — the per-tool limits are in
 [references/gotchas.md](references/gotchas.md).
 
-There is no universal good score. Gate on "no new survivors in changed
-code", not on an absolute number.
+There is no universal good score. Gate on the changed code: every mutant
+there is killed, or excluded with the user's approval.
 
 ## Done means
 
 - No surviving mutant can change an amount, a permission, or a stored record
   on the code in scope.
-- Every remaining survivor is proven equivalent, with the proof written down.
+- Every remaining survivor is a written claim that a fresh judge failed to
+  kill. Every exclusion comment was judged and approved by the user; a claim
+  nobody approved is reported as an open decision, with no exclusion.
 - Every survivor is explained in one sentence a non-tester understands.
 - Every test you added asserts a business outcome and was confirmed to kill
   its mutant in a rerun.
@@ -148,4 +184,6 @@ code", not on an absolute number.
 A high score with unexplained survivors is not done. A finished report with
 three explained, ranked survivors the user chose to accept is.
 
-Last verified: 2026-09-02 with Claude Code (live test on nine stacks)
+Last verified: 2026-10-05 with Claude Code (claude-opus-5-5, headless,
+StrykerJS on TicketBay: judge, approval and report steps). Tool setup
+last verified 2026-09-02 (live test on nine stacks).
