@@ -74,8 +74,12 @@ export const CONFIG_PATH = ".github/pr-review.jsonc";
 
 export function loadConfig(path = CONFIG_PATH) {
   if (!existsSync(path)) return null;
-  const cfg = parseJsonc(readFileSync(path, "utf8"));
-  if (cfg.version !== 1) throw new Error(`${path}: unsupported "version" ${cfg.version} (expected 1)`);
+  return normalizeConfig(parseJsonc(readFileSync(path, "utf8")), path);
+}
+
+// `where` names the file in errors: a path, or "<repo>:<path>" for a file read from git.
+export function normalizeConfig(cfg, where = CONFIG_PATH) {
+  if (cfg.version !== 1) throw new Error(`${where}: unsupported "version" ${cfg.version} (expected 1)`);
   cfg.areas ??= {};
   cfg.tests ??= [];
   cfg.noise ??= [];

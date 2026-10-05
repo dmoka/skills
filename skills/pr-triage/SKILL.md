@@ -17,28 +17,34 @@ reading tour built from the same data, so a reviewer can check the judgement
 in one click.
 
 Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
-`gh` logged in). If you fetched this over HTTP, fetch `scripts/*.mjs` and
-the files in `references/` as raw text with `curl -sSL`.
+`gh` logged in; `az` for Azure DevOps repos). If you fetched this over HTTP,
+fetch `scripts/*.mjs` and the files in `references/` as raw text with
+`curl -sSL`.
 
 ## The loop
 
-1. **Check the ground.** Inside a git repo with a GitHub remote, `gh auth
-   status` green. Otherwise report BLOCKED with the exact failing command.
+1. **Check the logins.** `node scripts/preflight.mjs` prints one row per repo
+   (host, tool, status): the install link or the login command to run when a
+   row is not `ready`. Never ask for a token and never run a login yourself;
+   pass the command on to the user. Done when at least one row is `ready`;
+   otherwise report BLOCKED with the table.
 2. **Compute.** `node scripts/triage.mjs` (add `--repo owner/name` outside
    the repo). For every open PR it writes `.pr-review/tour-<n>.json` — files,
    noise, FACT items, reading order, the author's words — and it writes
    `.pr-review/triage.json` listing them, fetches every PR head once into
    `origin/<head>` for the judges, and renders the unjudged page. No
-   model is involved. Rerunning replaces the reports and pages, judgements
-   included, and removes those of PRs that closed — judge after the last
-   run.
+   model is involved. With a repo list it does this for every `ready` repo,
+   into one queue (see [Many repos](#many-repos)). Rerunning replaces the
+   reports and pages, judgements included, and removes those of PRs that
+   closed — judge after the last run.
    More than 20 open PRs: say how many, and ask before judging them all.
 3. **Judge each PR on its own.** For each `tour-<n>.json`, read that PR —
    `gh pr diff <n>`, noise skimmed, surrounding code at the PR head
    (`git fetch origin <head>` then `git show "origin/<head>:<path>"` — never
    `FETCH_HEAD`, which parallel judges overwrite) — and write
-   `.pr-review/tour-<n>.notes.json` in the format of
-   [references/notes.md](references/notes.md), **with the `attention` block**.
+   `.pr-review/tour-<n>.notes.json` (many repos: `<n>` is the PR key) in the
+   format of [references/notes.md](references/notes.md), **with the
+   `attention` block**.
    Then `node scripts/annotate.mjs .pr-review/tour-<n>.json
    .pr-review/tour-<n>.notes.json` — it writes the checked notes into
    `tour-<n>.json` — and fix the notes until it passes.
@@ -48,7 +54,8 @@ the files in `references/` as raw text with `curl -sSL`.
    own merits.
 4. **Order the queue.** Read every PR's `attention`. Write
    `.pr-review/triage.notes.json`: `{ "summary": "...", "order": [7, 6, ...] }`
-   — most attention first, by level. Within a level, apply these in order
+   — the `key` of each PR in `triage.json` (many repos: `"dmoka-ticket-bay-7"`),
+   most attention first, by level, across all repos. Within a level, apply these in order
    and stop at the first that separates two PRs: irreversible before
    reversible; live code before code nothing calls yet; a PR that conflicts
    with others (`overlaps`) before one that does not; older before newer. The summary is two or three
@@ -86,6 +93,19 @@ hand this, and nothing else, to each judge:
 > your checked notes into tour-N.json. Fix your notes until it passes. Do not
 > touch GitHub or any other file. Reply with your attention block.
 
+Many repos: N is the PR key; replace `gh pr diff N`, `gh pr view N` and
+`git show "origin/HEAD_BRANCH:<path>"` with the commands in the tour's `read`
+block (`read.diff`, `read.show`, `read.grep`) and the PR text in its `intent`.
+
+## Many repos
+
+List them once in `~/.config/pr-triage/repos.jsonc`; the format, the code
+cache and the PR keys are in [references/config.md](references/config.md).
+With the list, `triage.mjs` triages every `ready` repo into one queue, from
+any folder, and lists the others at the top of the page; `--repo owner/name`
+still triages one repo. Each card shows its repo; a filter shows one repo.
+`node scripts/triage.mjs --clean-cache [<host>:<path>]` removes the cache.
+
 ## Hard rules
 
 - **Judge the change, not its size, title, or author.** Read the diff before
@@ -95,8 +115,8 @@ hand this, and nothing else, to each judge:
   the common phrasings; the rule covers the rest.
 - **Every level above low points at a line**, with a verbatim code fragment
   the gate checks. No line, no judgement.
-- **Read-only on GitHub.** Never comment, label, approve, request changes,
-  assign, or merge. Outputs live in `.pr-review/`; if neither `.gitignore`
+- **Read-only on the host** (GitHub, Azure DevOps). Never comment, label,
+  approve, request changes, assign, or merge. Outputs live in `.pr-review/`; if neither `.gitignore`
   nor `.git/info/exclude` covers it, suggest adding it.
 
 ## What the ranking cannot see
@@ -116,7 +136,14 @@ hand this, and nothing else, to each judge:
 - `review.html` exists and opens every PR's tour from the queue.
 - The chat report gives the queue with levels and reasons, most attention
   first.
-- Nothing on GitHub changed.
+- Nothing on GitHub or Azure DevOps changed.
+
+## Gotchas
+
+- PR numbers repeat across repos. With a repo list, name every PR by its key.
+- Never `git fetch` into the cache: `triage.mjs` already fetched every head,
+  and parallel fetches collide on refs.
+- `gitlab:` entries are listed as "not supported yet"; do not work around it.
 
 The intent map inside each tour, its search order for the author's intent,
 and the fresh-session rule are adapted from Matt Pocock's

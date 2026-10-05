@@ -41,6 +41,45 @@ with comments and trailing commas allowed. Nothing in it ranks PRs.
 Globs: `**` any depth, `*` within one folder, `?`, `{a,b}`. A glob without `/`
 matches the file name anywhere (`"*.sql"`).
 
+## `~/.config/pr-triage/repos.jsonc` — many repos (pr-triage only)
+
+One list per user, in the home folder (`~` on macOS and Linux,
+`%USERPROFILE%` on Windows). No list: pr-triage triages the current repo.
+`triage.mjs --repo owner/name` ignores the list.
+
+```jsonc
+{
+  "repos": [
+    "github:dmoka/ticket-bay",             // github:<owner>/<repo>
+    "azure:contoso/Payments/payments-api", // azure:<org>/<project>/<repo>
+  ],
+}
+```
+
+- **Hosts:** `github` needs `gh`, logged in. `azure` needs `az`, the
+  `azure-devops` extension and `az login`. A `gitlab:` entry shows "GitLab is
+  not supported yet". Each repo's own `.github/pr-review.jsonc` is read from
+  its default branch.
+- **Login check** (pr-triage's `preflight.mjs`; `triage.mjs` prints the
+  same table first), per repo and in order: tool installed (else the install
+  link), logged in (else the login command), can this login read the repo (else
+  "your login can't read this repo; ask for read access"). Only `ready`
+  repos are triaged. Nothing asks for a token, stores a credential or runs a
+  login.
+- **Code cache:** `~/.cache/pr-triage/<host>/<path>`, a bare clone with
+  `--filter=blob:none` and no working tree. Each run fetches every open PR
+  head into `refs/pr-triage/pr/<n>` (GitHub: `refs/pull/<n>/head`; Azure
+  DevOps: the source branch, else `refs/pull/<n>/merge`), each base branch
+  and the default branch into `refs/heads/<branch>`, deletes the refs of
+  closed PRs, and downloads the files at those heads in one batch, so judges
+  read offline. Git borrows the login you have: `gh auth git-credential` for
+  GitHub; for Azure DevOps, the `az login` token as an HTTP header for that
+  fetch only, else your git credential manager.
+  `triage.mjs --clean-cache [<host>:<path>]` deletes the cache, or one repo's.
+- **Keys:** a PR is `<repo slug>-<number>` (`dmoka-ticket-bay-33`): its tour
+  is `tour-<key>.json`, `triage.notes.json` orders keys, the page links
+  `#/pr/<key>`.
+
 ## Built-in defaults
 
 - **Tests:** `test/`, `tests/`, `__tests__/`, `spec/`, `e2e/`, `*.test.*`,
@@ -69,9 +108,16 @@ Both reports carry `kind` (`"triage"` or `"tour"`) and `schemaVersion: 1`.
 `prs[]` in queue order: `rank`, `attention` (copied from the PR's tour),
 `number`, `title`, `url`, `author`, `draft`, `labels`, `ageDays`,
 `additions`, `deletions`, `filesChanged`, `readLines`, `noiseLines`,
-`noiseFiles`, `intent`, `highFacts[]`, and `tour` (the file name of its tour).
+`noiseFiles`, `intent`, `highFacts[]`, and `tour` (the file name of its tour). Every PR has a `key`:
+its number for one repo, `<repo slug>-<number>` for many. With a repo list,
+`repo` is null, each PR also carries `repo` (`owner/name`) and `repoId`
+(`github:owner/name`), `repos[]` lists every listed repo (`id`, `host`,
+`path`, `slug`, `ready`, `status`, `open`, `skipped[]` of `{ number, reason }`,
+`cache`), and each `overlaps[]` entry names its `repo`.
 
-**tour-<n>.json** — `pr` (metadata), `attention` (model: `level`: `critical` |
+**tour-<key>.json** — `pr` (metadata), with a repo list also `host` and
+`read` (`gitDir`, `base`, `head`, and the `diff`, `show`, `grep` commands a
+judge reads the PR with), `attention` (model: `level`: `critical` |
 `high` | `medium` | `low`, `whatHappened`, `why`, `file`, `line`, `side`),
 `intent` (`status`: `spec` | `described` | `title only` | `UNKNOWN`,
 `sources[]` of `{ type: spec | description | issue | commits | title, source,

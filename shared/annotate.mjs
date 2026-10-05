@@ -5,7 +5,8 @@
 //
 //   node annotate.mjs <report.json> <notes.json>
 //
-// Triage notes: { "summary": "...", "order": [<pr number>, ...] }   — most attention first
+// Triage notes: { "summary": "...", "order": [<pr key>, ...] }   — most attention first;
+//               the key is the PR number for one repo, "<repo slug>-<number>" for many
 // Tour notes:   { "attention": { "level": "critical|high|medium|low", "whatHappened": "...", "why": "...",
 //                                "file": "...", "line": 12, "code": "<fragment of that line>", "side": "new|old" },
 //                 "whatItDoes": "...",
@@ -49,35 +50,38 @@ const LEVELS = ["critical", "high", "medium", "low"];
 if (report.kind === "triage") {
   // The order is the model's; the gate checks it is complete and consistent
   // with the attention each PR's own judge gave it.
+  // One queue may hold many repos: a PR is named by its key, not its number.
   checkText("summary", notes.summary, { max: 800 });
-  const order = (notes.order ?? []).map(Number);
-  const known = new Set(report.prs.map((p) => p.number));
+  const keyOf = (p) => String(p.key ?? p.number);
+  const label = (k) => (/^\d+$/.test(k) ? `#${k}` : k);
+  const order = (notes.order ?? []).map(String);
+  const known = new Set(report.prs.map(keyOf));
   const seen = new Set();
   for (const n of order) {
-    if (!known.has(n)) errors.push(`order: #${n} is not an open PR in this report`);
-    if (seen.has(n)) errors.push(`order: #${n} appears twice`);
+    if (!known.has(n)) errors.push(`order: ${label(n)} is not an open PR in this report${report.repos ? ' — use the "key" of each PR in triage.json' : ""}`);
+    if (seen.has(n)) errors.push(`order: ${label(n)} appears twice`);
     seen.add(n);
   }
-  for (const n of known) if (!seen.has(n)) errors.push(`order: #${n} is missing — every open PR gets a place`);
+  for (const n of known) if (!seen.has(n)) errors.push(`order: ${label(n)} is missing — every open PR gets a place`);
   const attentionOf = new Map();
   for (const p of report.prs) {
     const path = join(dirname(reportPath), p.tour);
     const tour = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
-    if (!tour?.attention) errors.push(`#${p.number}: ${p.tour} has no attention yet — judge it first (annotate the tour with an "attention" block)`);
-    else attentionOf.set(p.number, tour.attention);
+    if (!tour?.attention) errors.push(`${label(keyOf(p))}: ${p.tour} has no attention yet — judge it first (annotate the tour with an "attention" block)`);
+    else attentionOf.set(keyOf(p), tour.attention);
   }
   let prev = 0;
   for (const n of order) {
     const a = attentionOf.get(n);
     if (!a) continue;
     const lvl = LEVELS.indexOf(a.level);
-    if (lvl < prev) errors.push(`order: #${n} is "${a.level}" but sits below a "${LEVELS[prev]}" PR — order by level first, then by your judgement within a level`);
+    if (lvl < prev) errors.push(`order: ${label(n)} is "${a.level}" but sits below a "${LEVELS[prev]}" PR — order by level first, then by your judgement within a level`);
     prev = Math.max(prev, lvl);
   }
   if (!errors.length) {
     report.summary = notes.summary ?? null;
     const rank = new Map(order.map((n, i) => [n, i + 1]));
-    for (const p of report.prs) { p.attention = attentionOf.get(p.number); p.rank = rank.get(p.number); }
+    for (const p of report.prs) { p.attention = attentionOf.get(keyOf(p)); p.rank = rank.get(keyOf(p)); }
     report.prs.sort((a, b) => a.rank - b.rank);
   }
 } else if (report.kind === "tour") {

@@ -15,13 +15,21 @@ import { buildChangeMap } from "./diagrams.mjs";
 
 export const ORDER_RULE = "hotspots (any high-severity item) first, then by layer (alphabetical within a layer); each test right after the code it tests; tests with no changed source next; noise collapsed last";
 
-function git(a) {
-  try { return execFileSync("git", a, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }); }
+// gitDir: read a bare repo (pr-triage's cache for many repos) instead of the current one.
+function git(a, gitDir) {
+  const args = gitDir ? ["--git-dir", gitDir, ...a] : a;
+  try { return execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }); }
   catch (e) { throw new Error(`git ${a.join(" ")} failed: ${(e.stderr || e.message).toString().trim()}`); }
 }
 
+const gitLog = (base, head, gitDir) => git(["log", `${base}..${head}`, "--format=%s%x1f%b%x1e"], gitDir).split("\x1e").map((c) => c.trim()).filter(Boolean)
+  .map((c) => { const [subject, body = ""] = c.split("\x1f"); return { subject: subject.trim(), body: body.trim() }; });
+
 /**
  * source: { number, repo }                                  — an open PR, through gh
+ *       | { meta, cache: { gitDir, base, head }, repo, host, readIssue }
+ *                                                           — an open PR of a listed repo (pr-triage, many
+ *                                                             repos): the host's PR text, code from the cache
  *       | { git: "main...feat/x", title?, body?, spec? }    — a local branch
  *       | { diffText, title?, body?, branch?, spec? }        — a saved diff
  */
@@ -30,8 +38,14 @@ export function buildTour(source, cfg, configPath) {
   let diffText;
   let commits = [];
   const repo = source.repo ?? null;
+  const gitDir = source.cache?.gitDir;
 
-  if (source.number != null && repo) {
+  if (source.cache) {
+    const { base, head } = source.cache;
+    pr = source.meta;
+    diffText = git(["-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff", "-M", `${base}...${head}`], gitDir);
+    commits = gitLog(base, head, gitDir);
+  } else if (source.number != null && repo) {
     pr = ghJson(["pr", "view", String(source.number), "--json", "number,title,body,author,url,baseRefName,headRefName,headRefOid,createdAt,isDraft,closingIssuesReferences,commits"], { repo });
     commits = (pr.commits ?? []).map((c) => ({ subject: (c.messageHeadline || "").trim(), body: (c.messageBody || "").trim() }));
     diffText = gh(["pr", "diff", String(source.number)], { repo });
@@ -39,10 +53,7 @@ export function buildTour(source, cfg, configPath) {
     const range = source.git;
     const [base, head] = range ? range.split(/\.{2,3}/) : [null, source.branch ?? null];
     diffText = range ? git(["diff", range]) : source.diffText;
-    if (range) {
-      commits = git(["log", `${base}..${head}`, "--format=%s%x1f%b%x1e"]).split("\x1e").map((c) => c.trim()).filter(Boolean)
-        .map((c) => { const [subject, body = ""] = c.split("\x1f"); return { subject: subject.trim(), body: body.trim() }; });
-    }
+    if (range) commits = gitLog(base, head);
     pr = {
       // Local runs are named after the branch, so two branches never overwrite each other.
       number: source.number ?? (branchSlug(head) || "local"),
@@ -60,24 +71,27 @@ export function buildTour(source, cfg, configPath) {
   const specPaths = [].concat(source.spec ?? []);
   const slug = branchSlug(pr.headRefName);
   if (!specPaths.length && slug.length >= 4) {
-    for (const dir of cfg?.tour?.specDirs ?? ["docs", "specs", ".scratch", "contracts"]) {
-      if (!existsSync(dir)) continue;
-      for (const f of readdirSync(dir, { recursive: true })) {
-        const name = String(f).toLowerCase();
-        if (name.endsWith(".md") && name.split("/").pop().includes(slug)) specPaths.push(join(dir, String(f)));
-      }
+    const dirs = cfg?.tour?.specDirs ?? ["docs", "specs", ".scratch", "contracts"];
+    // From the cache, the spec folders are read at the PR head.
+    const candidates = source.cache
+      ? git(["ls-tree", "-r", "--name-only", source.cache.head, "--", ...dirs], gitDir).split("\n").filter(Boolean)
+      : dirs.filter((dir) => existsSync(dir)).flatMap((dir) => readdirSync(dir, { recursive: true }).map((f) => join(dir, String(f))));
+    for (const p of candidates) {
+      const name = p.toLowerCase();
+      if (name.endsWith(".md") && name.split("/").pop().includes(slug)) specPaths.push(p);
     }
   }
-  for (const p of specPaths.slice(0, 3)) add("spec", `spec: ${p}`, readFileSync(p, "utf8"));
+  for (const p of specPaths.slice(0, 3)) add("spec", `spec: ${p}`, source.cache ? git(["show", `${source.cache.head}:${p}`], gitDir) : readFileSync(p, "utf8"));
 
   // 2. The PR description and every issue it or its commits point at.
   add("description", "PR description", pr.body);
   const issues = new Set((pr.closingIssuesReferences ?? []).map((i) => i.number));
   for (const c of commits) for (const n of issueRefs(`${c.subject}\n${c.body}`)) issues.add(n);
+  const readIssue = "readIssue" in source ? source.readIssue : repo ? (n) => ghJson(["issue", "view", String(n), "--json", "number,title,body"], { repo }) : null;
   for (const n of issues) {
-    if (!repo) break;
+    if (!readIssue) break;
     try {
-      const i = ghJson(["issue", "view", String(n), "--json", "number,title,body"], { repo });
+      const i = readIssue(n);
       add("issue", `issue #${i.number}: ${i.title}`, `${i.title}\n\n${i.body || ""}`);
     } catch { /* a PR number or an unreadable issue: the commit text still counts */ }
   }
@@ -109,6 +123,7 @@ export function buildTour(source, cfg, configPath) {
     schemaVersion: SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
     repo,
+    ...(source.cache ? { host: source.host ?? null, read: readCommands(source.cache) } : {}),
     config: {
       path: cfg ? configPath : null,
       note: cfg ? undefined : "no config — built-in defaults for tests, noise and reading order",
@@ -147,8 +162,10 @@ export function buildTour(source, cfg, configPath) {
 // saved diff, only the added lines are known.
 function headReader(source, pr, repo, files) {
   const cache = new Map();
+  const gitDir = source.cache?.gitDir;
   let ref = null;
-  if (source.git) ref = source.git.split(/\.{2,3}/)[1];
+  if (source.cache) ref = source.cache.head;
+  else if (source.git) ref = source.git.split(/\.{2,3}/)[1];
   else if (repo && pr.headRefName) {
     try { git(["rev-parse", "--verify", "-q", `origin/${pr.headRefName}`]); ref = `origin/${pr.headRefName}`; }
     catch {
@@ -159,13 +176,19 @@ function headReader(source, pr, repo, files) {
     if (cache.has(path)) return cache.get(path);
     let text = null;
     try {
-      if (ref) text = git(["show", `${ref}:${path}`]);
+      if (ref) text = git(["show", `${ref}:${path}`], gitDir);
       else if (repo && pr.headRefOid) text = gh(["api", `repos/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${pr.headRefOid}`, "-H", "Accept: application/vnd.github.raw"]);
       else { const f = files.find((x) => x.path === path); text = f ? f.hunks.flatMap((h) => h.lines.filter((l) => l.t !== "del").map((l) => l.s)).join("\n") : null; }
     } catch { text = null; }
     cache.set(path, text);
     return text;
   };
+}
+
+// The exact commands a judge reads a cached PR with: no gh, no checkout, any host.
+function readCommands({ gitDir, base, head }) {
+  const g = `git --git-dir "${gitDir}"`;
+  return { gitDir, base, head, diff: `${g} diff ${base}...${head}`, show: `${g} show ${head}:<path>`, grep: `${g} grep -n <pattern> ${head}` };
 }
 
 export function writeReport(outDir, name, report) {
