@@ -63,10 +63,12 @@ ignores the list.
   branch.
 - **Login check** (pr-triage's `preflight.mjs`; `triage.mjs` prints the
   same table first), per repo and in order: `git` and `gh` installed (else
-  the install link), `gh` logged in (else `gh auth login`), the login can read
-  the repo (else "your login can't read this repo; ask for read access").
-  Only `ready` repos are triaged. Nothing asks for a token, stores a
-  credential or runs a login.
+  the install link), `gh` logged in (else `gh auth login`; with a bad
+  `GH_TOKEN`/`GITHUB_TOKEN`, "set but not valid"; offline, "network error:
+  can't reach github.com"), the login can read the repo (else "not found —
+  check the spelling; if it is private, your login can't read this repo; ask
+  for read access": GitHub answers the same for both). Only `ready` repos
+  are triaged. Nothing asks for a token, stores a credential or runs a login.
 - **Code cache:** `~/.cache/pr-triage/github/<owner>/<repo>`, a bare clone
   with `--filter=blob:none`: no working tree, file contents only where needed.
   Each run fetches every open PR head (`refs/pull/<n>/head`) into
@@ -74,8 +76,11 @@ ignores the list.
   `refs/heads/<branch>`, deletes the refs of closed PRs, and downloads the
   files at those heads in one batch, so judges read offline. Git borrows your
   `gh` login through `gh auth git-credential`; the cache stores no token. It
-  never touches your checkouts. `triage.mjs --clean-cache
-  [github:<owner>/<repo>]` deletes the cache, or one repo's.
+  never touches your checkouts. A broken cache is deleted and cloned again.
+  One run at a time per repo: a run waits for another (a lock in
+  `~/.cache/pr-triage/.locks`, taken over when its process is gone).
+  `triage.mjs --clean-cache [github:<owner>/<repo>]` deletes the cache, or
+  one repo's; it refuses while a run uses it.
 - **Keys:** a PR is `<owner>-<repo>-<number>` (`dmoka-ticket-bay-33`): its
   tour is `tour-<key>.json`, `triage.notes.json` orders keys, the page links
   `#/pr/<key>`.

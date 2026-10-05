@@ -8,7 +8,7 @@
 // the refs of PRs that closed, updates the default branch, and downloads the
 // files at every fetched head in one batch, so reads stay offline and fast.
 
-import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync, statSync, renameSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { run as defaultRun, firstLine } from "./repos.mjs";
@@ -16,6 +16,9 @@ import { run as defaultRun, firstLine } from "./repos.mjs";
 export const cacheRoot = (home = homedir()) => join(home, ".cache", "pr-triage");
 export const cacheDirOf = (entry, home) => join(cacheRoot(home), entry.host, ...entry.path.split("/"));
 export const prRef = (n) => `refs/pr-triage/pr/${n}`;
+// Locks live in their own tree: "<repo>.lock" beside the cache could be a real repo's name.
+const locksRoot = (home) => join(cacheRoot(home), ".locks");
+export const lockDirOf = (entry, home) => join(locksRoot(home), entry.host, ...entry.path.split("/"));
 
 // A cache command never inherits a repo the caller pointed git at.
 function gitEnv(extra) {
@@ -39,7 +42,7 @@ export function syncCache(opts) {
   const dir = cacheDirOf(entry, home);
   if (!info.defaultBranch) throw new Error(`${entry.id}: the host reports no default branch (an empty repo?)`);
   mkdirSync(dirname(dir), { recursive: true });
-  return withLock(`${dir}.lock`, () => {
+  return withLock(lockDirOf(entry, home), entry.id, home, () => {
     if (existsSync(dir) && !healthy(dir, run)) {
       console.error(`${entry.id}: the cache is broken; deleting it and cloning again`);
       rmSync(dir, { recursive: true, force: true });
@@ -56,30 +59,53 @@ function healthy(dir, run) {
     && ok(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]);
 }
 
-// mkdir is atomic: whoever creates the folder holds the lock. A lock whose
-// process is gone, or older than 30 minutes, is taken over.
-function withLock(lock, fn, { waitMs = 10 * 60 * 1000, staleMs = 30 * 60 * 1000 } = {}) {
+// A lock is a folder holding the owner's pid. It is built under a temporary
+// name and renamed into place, so it never exists without its pid, and the
+// rename fails when another run holds it. A lock whose process is gone, or
+// older than 30 minutes, is taken over.
+function withLock(lock, id, home, fn, { waitMs = 10 * 60 * 1000 } = {}) {
   const start = Date.now();
   const nap = new Int32Array(new SharedArrayBuffer(4));
+  const tmp = join(locksRoot(home), ".tmp", `${process.pid}-${Math.random().toString(36).slice(2)}`);
+  mkdirSync(dirname(lock), { recursive: true });
+  let told = false;
   for (;;) {
-    try { mkdirSync(lock); writeFileSync(join(lock, "pid"), String(process.pid)); break; }
+    mkdirSync(tmp, { recursive: true });
+    writeFileSync(join(tmp, "pid"), String(process.pid));
+    try { renameSync(tmp, lock); break; }
     catch (e) {
-      if (e.code !== "EEXIST") throw e;
-      if (lockIsStale(lock, staleMs)) { rmSync(lock, { recursive: true, force: true }); continue; }
-      if (Date.now() - start > waitMs) throw new Error(`another pr-triage run holds ${lock}; if none is running, delete that folder`);
+      rmSync(tmp, { recursive: true, force: true });
+      if (!["EEXIST", "ENOTEMPTY", "EPERM", "EACCES"].includes(e.code)) throw e;
+      const holder = lockState(lock);
+      if (holder.stale) { takeOver(lock, holder.pid); continue; }
+      if (!told) { console.error(`waiting for another pr-triage run (pid ${holder.pid ?? "?"}) to finish with ${id}…`); told = true; }
+      if (Date.now() - start > waitMs) throw new Error(`another pr-triage run (pid ${holder.pid ?? "?"}) holds ${lock}; if none is running, delete that folder`);
       Atomics.wait(nap, 0, 0, 250);
     }
   }
   try { return fn(); } finally { rmSync(lock, { recursive: true, force: true }); }
 }
 
-function lockIsStale(lock, staleMs) {
-  try {
-    if (Date.now() - statSync(lock).mtimeMs > staleMs) return true;
-    const pid = Number(readFileSync(join(lock, "pid"), "utf8"));
-    if (!pid) return false; // the owner has not written its pid yet
-    try { process.kill(pid, 0); return false; } catch (e) { return e.code === "ESRCH"; }
-  } catch { return false; }
+// { pid, stale }: stale when the pid is dead, the pid file is missing for 30 s, or the lock is 30 minutes old.
+export function lockState(lock) {
+  let age;
+  try { age = Date.now() - statSync(lock).mtimeMs; } catch { return { pid: null, stale: false, free: true }; }
+  let pid = null;
+  try { pid = Number(readFileSync(join(lock, "pid"), "utf8")) || null; } catch { /* no pid file */ }
+  if (age > 30 * 60 * 1000) return { pid, stale: true };
+  if (!pid) return { pid, stale: age > 30 * 1000 };
+  try { process.kill(pid, 0); return { pid, stale: false }; } catch (e) { return { pid, stale: e.code === "ESRCH" }; }
+}
+
+// Moves the stale lock aside first, so two runs that both saw it stale never
+// delete a lock a third run just took.
+function takeOver(lock, stalePid) {
+  const trash = `${dirname(lock)}${sep}.stale-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  try { renameSync(lock, trash); } catch { return; }
+  let pid = null;
+  try { pid = Number(readFileSync(join(trash, "pid"), "utf8")) || null; } catch { /* none */ }
+  if (pid !== stalePid) { try { renameSync(trash, lock); return; } catch { /* the name is taken again */ } }
+  rmSync(trash, { recursive: true, force: true });
 }
 
 function syncOnce({ entry, info, prs, adapter, run = defaultRun }, dir) {
@@ -140,12 +166,26 @@ function syncOnce({ entry, info, prs, adapter, run = defaultRun }, dir) {
   };
 }
 
-// Removes the whole cache, or one repo's. Refuses any path outside the cache root.
+// Removes the whole cache, or one repo's. Refuses any path outside the cache
+// root, and any cache a running pr-triage holds.
 export function cleanCache({ entry, home } = {}) {
   const root = resolve(cacheRoot(home));
   const target = resolve(entry ? cacheDirOf(entry, home) : root);
   if (target !== root && !target.startsWith(root + sep)) throw new Error(`refusing to remove ${target}: not inside ${root}`);
+  const locks = entry ? [lockDirOf(entry, home)] : heldLocks(locksRoot(home));
+  for (const lock of locks) {
+    const s = lockState(lock);
+    if (!s.free && !s.stale) throw new Error(`a pr-triage run (pid ${s.pid ?? "?"}) is using this cache; run --clean-cache again when it ends`);
+  }
   const existed = existsSync(target);
   rmSync(target, { recursive: true, force: true });
   return { target, existed };
+}
+
+// Every lock folder under the locks tree (a folder that holds a pid file).
+function heldLocks(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { recursive: true }).map(String)
+    .filter((p) => p.endsWith(`${sep}pid`) && !p.startsWith(`.tmp${sep}`) && statSync(join(dir, p)).isFile())
+    .map((p) => join(dir, dirname(p)));
 }

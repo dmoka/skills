@@ -44,8 +44,9 @@ export function parseRepoEntry(text) {
   const s = String(text ?? "").trim();
   if (!s) return { id: "(empty entry)", host: null, path: null, error: `empty — write "github:<owner>/<repo>"` };
   // Common slips get the entry they meant: a URL, "gh:", a bare owner/repo.
-  const url = s.match(/^https?:\/\/(?:www\.)?github\.com\/([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/i);
-  if (url) return { id: s, host: null, path: null, error: `did you mean "github:${url[1]}"?` };
+  // Any github.com URL: a repo, a PR, a file. Owner and repo are its first two parts.
+  const url = s.match(/^https?:\/\/(?:www\.)?github\.com\/([^/\s?#]+)\/([^/\s?#]+)/i);
+  if (url) return { id: s, host: null, path: null, error: `did you mean "github:${url[1]}/${url[2].replace(/\.git$/i, "")}"?` };
   const m = s.match(/^([A-Za-z][\w-]*):(.+)$/);
   if (!m) {
     const bare = /^[\w.-]+\/[\w.-]+$/.test(s) ? ` — did you mean "github:${s}"?` : `, e.g. "github:owner/repo"`;
@@ -106,7 +107,7 @@ export function preflight(entries, { run: exec = run, env = process.env } = {}) 
 // private one this login cannot see, so the message names both.
 const CANNOT_READ = "not found — check the spelling; if it is private, your login can't read this repo; ask for read access";
 // gh says "Could not resolve to a Repository" for that case: that is not the network.
-const NETWORK = /error connecting to|could not resolve host|no such host|timed? ?out|network is unreachable|ENOTFOUND|ECONNRESET|connection (refused|reset)/i;
+const NETWORK = /error connecting to|could not resolve host|no such host|timed? ?out|network is unreachable|no route to host|dial tcp|proxyconnect|ENOTFOUND|ECONNRESET|connection (refused|reset)/i;
 const cannotRead = (r) => (NETWORK.test(r.stderr) ? `network error: ${firstLine(r.stderr)}` : CANNOT_READ);
 
 function checkOne(e, exec, once, env) {
@@ -122,6 +123,9 @@ function checkOne(e, exec, once, env) {
     return /unknown flag/.test(r.stderr) ? exec("gh", ["auth", "status", "--hostname", "github.com"]) : r;
   });
   if (!auth.ok) {
+    // Offline, gh calls every token invalid. One API call tells the network apart from the login.
+    const probe = once("gh-net", () => exec("gh", ["api", "--hostname", "github.com", "rate_limit"]));
+    if (!probe.ok && NETWORK.test(probe.stderr)) return fail(`network error: can't reach github.com — ${firstLine(probe.stderr)}`);
     // gh prefers a token in the environment over its own login; `gh auth login` cannot fix a bad one.
     const envToken = ["GH_TOKEN", "GITHUB_TOKEN"].find((k) => env[k]);
     return fail(envToken ? `${envToken} is set but not valid — unset it or replace it` : "not logged in — run: gh auth login");

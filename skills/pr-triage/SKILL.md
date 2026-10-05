@@ -103,8 +103,8 @@ Many repos: N is the PR key. The judge reads with the tour's `read.diff`,
 - **Cache:** `~/.cache/pr-triage/github/<owner>/<repo>`, a partial clone
   (`--filter=blob:none`), no working tree. Each run fetches every open PR head
   into `refs/pr-triage/pr/<n>`, updates the default branch and deletes the
-  refs of closed PRs. It never touches your checkouts. Delete it with
-  `node scripts/triage.mjs --clean-cache [github:<owner>/<repo>]`.
+  refs of closed PRs. It never touches your checkouts; a broken one is cloned
+  again. Delete it: `node scripts/triage.mjs --clean-cache [github:<owner>/<repo>]`.
 - **Keys:** a PR is `<owner>-<repo>-<n>` (`dmoka-ticket-bay-33`) in file
   names, links and the queue order; each card shows its repo.
 

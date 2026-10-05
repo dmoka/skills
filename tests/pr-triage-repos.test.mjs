@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, readdirSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseRepoEntry, loadRepoList, preflight, formatTable } from "../skills/pr-triage/scripts/repos.mjs";
 import { adapterFor } from "../skills/pr-triage/scripts/hosts.mjs";
-import { syncCache, cleanCache, cacheDirOf, prRef } from "../skills/pr-triage/scripts/cache.mjs";
+import { syncCache, cleanCache, cacheDirOf, lockDirOf, prRef } from "../skills/pr-triage/scripts/cache.mjs";
 import { readCommands } from "../skills/pr-triage/scripts/build.mjs";
 
 const SCRIPTS = fileURLToPath(new URL("../skills/pr-triage/scripts/", import.meta.url));
@@ -27,6 +27,7 @@ test("repo entries: github parses; gitlab and azure are not supported yet; unkno
   // GitHub names ignore case: one id, one cache folder.
   assert.equal(parseRepoEntry("GITHUB:DMoka/Ticket-Bay").id, "github:dmoka/ticket-bay");
   assert.equal(parseRepoEntry("https://github.com/dmoka/ticket-bay.git").error, 'did you mean "github:dmoka/ticket-bay"?');
+  assert.equal(parseRepoEntry("https://github.com/dmoka/ticket-bay/pull/33").error, 'did you mean "github:dmoka/ticket-bay"?');
   assert.equal(parseRepoEntry("gh:dmoka/x").error, 'unknown host "gh" — did you mean "github:dmoka/x"?');
   assert.equal(parseRepoEntry("  ").id, "(empty entry)");
 });
@@ -70,7 +71,13 @@ test("preflight: install link, login command, read access, ready — in that ord
 
   const loggedOut = fakeRun([GIT_OK, [/^gh --version/, {}], [/^gh auth status/, { ok: false, stderr: "You are not logged into any GitHub hosts." }]]);
   assert.equal(preflight(entries("github:a/b"), { run: loggedOut.exec, env: {} })[0].status, "not logged in — run: gh auth login");
-  // gh login cannot fix a bad token in the environment.
+  // Offline, gh calls every token invalid: the probe names the network instead.
+  const offline = fakeRun([GIT_OK, [/^gh --version/, {}], [/^gh auth status/, { ok: false, stderr: "The token in GH_TOKEN is invalid." }],
+    [/^gh api --hostname github.com rate_limit/, { ok: false, stderr: 'Get "https://api.github.com/rate_limit": proxyconnect tcp: dial tcp 127.0.0.1:9: connect: connection refused' }]]);
+  assert.match(preflight(entries("github:a/b"), { run: offline.exec, env: { GH_TOKEN: "x" } })[0].status, /^network error: can't reach github.com — Get .*proxyconnect/);
+  const offlineView = fakeRun([GIT_OK, [/^gh --version/, {}], [/^gh auth status/, {}], [/^gh repo view/, { ok: false, stderr: 'Post "https://api.github.com/graphql": dial tcp: i/o timeout' }]]);
+  assert.match(preflight(entries("github:a/b"), { run: offlineView.exec })[0].status, /^network error/);
+  // gh login cannot fix a bad token in the environment (the probe gets a 401, not a network error).
   assert.equal(preflight(entries("github:a/b"), { run: loggedOut.exec, env: { GH_TOKEN: "bad" } })[0].status, "GH_TOKEN is set but not valid — unset it or replace it");
 
   const gh = fakeRun([GIT_OK, [/^gh --version/, {}], [/^gh auth status --active/, {}], [/^gh repo view a\/public/, {}]]);
@@ -218,11 +225,32 @@ console.log(c.read("refs/pr-triage/pr/5", "src/price.ts") ? "ok" : "missing");`)
   for (const r of results) assert.deepEqual([r.code, r.out], [0, "ok"], r.err);
 
   // A lock left by a process that died: taken over, not waited on.
-  const dir = cacheDirOf(parseRepoEntry("github:acme/shop"), home);
-  mkdirSync(`${dir}.lock`);
-  writeFileSync(join(`${dir}.lock`, "pid"), "999999");
-  const r = await once();
+  const entry = parseRepoEntry("github:acme/shop");
+  const lock = lockDirOf(entry, home);
+  assert.ok(!lock.startsWith(cacheDirOf(entry, home)) && lock.includes(".locks"), "locks live apart from the caches");
+  mkdirSync(lock, { recursive: true });
+  writeFileSync(join(lock, "pid"), "999999");
+  let r = await once();
   assert.deepEqual([r.code, r.out], [0, "ok"], r.err);
+
+  // A lock folder with no pid, older than 30 s: taken over.
+  mkdirSync(lock, { recursive: true });
+  utimesSync(lock, new Date(Date.now() - 60000), new Date(Date.now() - 60000));
+  r = await once();
+  assert.deepEqual([r.code, r.out], [0, "ok"], r.err);
+
+  // A live run's lock: the next run says it waits, and goes on when the lock is released.
+  mkdirSync(lock, { recursive: true });
+  writeFileSync(join(lock, "pid"), String(process.pid));
+  assert.throws(() => cleanCache({ entry, home }), new RegExp(`pid ${process.pid}\\) is using this cache`));
+  assert.throws(() => cleanCache({ home }), /is using this cache/);
+  const waiting = once();
+  await new Promise((ok) => setTimeout(ok, 1500));
+  rmSync(lock, { recursive: true, force: true });
+  r = await waiting;
+  assert.deepEqual([r.code, r.out], [0, "ok"], r.err);
+  assert.match(r.err, new RegExp(`waiting for another pr-triage run \\(pid ${process.pid}\\) to finish with github:acme/shop`));
+  assert.equal(cleanCache({ home }).existed, true);
 });
 
 function annotate(dir, notes) {
