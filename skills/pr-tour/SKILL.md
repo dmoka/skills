@@ -1,6 +1,6 @@
 ---
 name: pr-tour
-description: Turn one pull request into a guided reading tour — the author's intent, which files that intent explains and which it does not, and checkable claims first, then where to look and why (script-computed facts plus line-checked pointers), then the files in the order a reviewer should read them with each test next to its code, and noise (lockfiles, generated files, renames, formatting) collapsed last — rendered as one self-contained HTML page plus JSON that agents can read. Not GitHub stacked PRs. Use when the user asks to review, walk through, explain, or understand a PR or diff, asks what to read first or what to worry about in a PR, or mentions PR tour or reading order.
+description: "Review one PR as a guided tour, in a sane reading order. Turn one pull request into a guided reading tour — the author's intent, which files that intent explains and which it does not, and checkable claims first, then where to look and why (script-computed facts plus line-checked pointers), then the files in the order a reviewer should read them with each test next to its code, and noise (lockfiles, generated files, renames, formatting) collapsed last — rendered as one self-contained HTML page plus JSON that agents can read. Not GitHub stacked PRs. Use when the user asks to review, walk through, explain, or understand a PR or diff, asks what to read first or what to worry about in a PR, or mentions PR tour or reading order."
 ---
 
 # PR tour
@@ -129,3 +129,5 @@ review against — say so instead of guessing one. Schema:
 
 The intent search order and the fresh-session rule are adapted from Matt
 Pocock's [`code-review`](https://github.com/mattpocock/skills) skill (MIT).
+
+Last verified: 2026-09-25 with Claude Code (shipped in dmoka/skills #1)

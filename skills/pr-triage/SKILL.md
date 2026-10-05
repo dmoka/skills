@@ -1,6 +1,6 @@
 ---
 name: pr-triage
-description: Read every open pull request in a repo, judge how much of a reviewer's attention each one needs (critical, high, medium, low) from what the change actually does, and order the queue most-attention-first — each judgement pointing at the line that drives it, each PR linked to a full reading tour. Renders one self-contained HTML queue plus JSON for agents. Use when the user asks which PR to review first, what needs attention in the PR queue, has too many open PRs, or mentions PR triage, review backlog, or review priority.
+description: "Triage open PRs: which need attention first, and why. Read every open pull request in a repo, judge how much of a reviewer's attention each one needs (critical, high, medium, low) from what the change actually does, and order the queue most-attention-first — each judgement pointing at the line that drives it, each PR linked to a full reading tour. Renders one self-contained HTML queue plus JSON for agents. Use when the user asks which PR to review first, what needs attention in the PR queue, has too many open PRs, or mentions PR triage, review backlog, or review priority."
 ---
 
 # PR triage
@@ -121,3 +121,5 @@ hand this, and nothing else, to each judge:
 The intent map inside each tour, its search order for the author's intent,
 and the fresh-session rule are adapted from Matt Pocock's
 [`code-review`](https://github.com/mattpocock/skills) skill (MIT).
+
+Last verified: 2026-09-28 with Hermes v0.21.5 (the morning cron job on dmoka/ticket-bay)

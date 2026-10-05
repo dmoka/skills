@@ -1,6 +1,6 @@
 ---
 name: mutation-testing
-description: Measure test quality with mutation testing and close the gaps it finds. Use when asked whether tests are any good, when coverage is high but confidence is low, after AI wrote or changed tests, or when the user mentions mutation testing, mutation score, surviving mutants, or names a mutation tool (Stryker, Pitest, mutmut, Infection, cargo-mutants).
+description: "Mutation-test a repo: find tests that would miss bugs. Measure test quality with mutation testing and close the gaps it finds. Use when asked whether tests are any good, when coverage is high but confidence is low, after AI wrote or changed tests, or when the user mentions mutation testing, mutation score, surviving mutants, or names a mutation tool (Stryker, Pitest, mutmut, Infection, cargo-mutants)."
 ---
 
 # Mutation testing
@@ -45,9 +45,10 @@ fetch returns prose rather than the literal markdown below, refetch with
    the user names, or the one where a silent bug costs the most (money math,
    permissions, data writes). If nobody names one, pick it yourself: the
    README or package layout usually says where the business logic lives, and
-   the money math is the file to start on. Say which file you chose and why.
-   A whole-repo first run on a real codebase takes hours and often dies; a
-   one-module run finishes in minutes and proves the point. Widen the scope
+   the logic where a silent bug costs the most is the file to start on. Say
+   which file you chose and why. A whole-repo first run on a real codebase
+   takes hours and often dies; a one-module run finishes in minutes and
+   proves the point. Widen the scope
    only after the first run succeeds. On a project small enough that one
    module *is* the whole codebase, say so and move on — do not invent a
    narrower scope to satisfy this step.
@@ -146,3 +147,5 @@ code", not on an absolute number.
 
 A high score with unexplained survivors is not done. A finished report with
 three explained, ranked survivors the user chose to accept is.
+
+Last verified: 2026-09-02 with Claude Code (live test on nine stacks)
