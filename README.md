@@ -29,6 +29,7 @@ quietly paraphrases the instructions away.
 | [`adversarial-tester`](skills/adversarial-tester/SKILL.md) | Hands a green test suite or a PR to a fresh agent whose only job is to break it — boundaries, rounding, zeros, odd splits. Reports every catch with its production damage, fixes nothing. Works as a Claude Code subagent or a Hermes `delegate_task`. |
 | [`agent-safety-audit`](skills/agent-safety-audit/SKILL.md) | Audits an agent setup (a Claude Code repo, a routine, a Hermes install, an agent in GitHub Actions) for the lethal trifecta: private data, untrusted input, a way out. Names the exact config behind each leg and the cheapest one to cut. Read-only. Two real audits included. |
 | [`write-great-skill`](skills/write-great-skill/SKILL.md) | Writes or fixes an agent skill. Interviews you first (the trigger, what you know that no model knows, what must never happen, which steps are mechanical), drafts the folder (a short SKILL.md, scripts for the mechanical steps, references read on demand), checks it with a script, then curates it with you. Includes a trigger test: does a fresh session pick the skill without being told? |
+| [`grill-me`](skills/grill-me/SKILL.md) | Makes the agent interview you about a plan before it builds anything — one hard question at a time, each with its recommended answer, the codebase checked before you are asked. Refuses a bulk "agree with all". Adapted from Matt Pocock's skill (MIT). |
 
 ## Why mutation testing
 
