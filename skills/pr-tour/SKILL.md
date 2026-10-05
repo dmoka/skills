@@ -34,7 +34,11 @@ Scripts sit in `scripts/` beside this file (Node ≥ 18, zero dependencies,
    `docs/`, `specs/`, `.scratch/` or `contracts/` whose name contains the
    branch name), the PR description, linked issues and `#123` refs in
    commits, the commit messages, the title. Intent status is `spec`,
-   `described`, `title only`, or `UNKNOWN`. It prints the noise line count.
+   `described`, `title only`, or `UNKNOWN`. It collapses noise last:
+   lockfiles, renames, formatting, and generated files (ORM snapshots,
+   minified bundles, large machine-written JSON, files with a generated
+   header; the full list is in [references/config.md](references/config.md#built-in-defaults)).
+   Noise is never an ASK WHY file. It prints the noise line count.
    An empty diff stops here with an error.
 2. **Read** the diff in the reading order (`gh pr diff <n>` or `git diff`),
    noise included — skim it, it is collapsed for humans, not for you. Read

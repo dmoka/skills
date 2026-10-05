@@ -47,9 +47,16 @@ matches the file name anywhere (`"*.sql"`).
   `*.spec.*`, `*_test.go`, `test_*.py`, `*_test.py`, `*Test(s).java|kt|cs`.
 - **Noise:** lockfiles (npm, yarn, pnpm, bun, Cargo, Poetry, uv, Go, Composer,
   Bundler, NuGet, Gradle, Nix), snapshots, `dist/`, `build/`, `*.min.*`,
-  files marked `@generated` or `DO NOT EDIT`, binaries, pure renames, and two
-  heuristics: **formatting only** (the change disappears once whitespace,
-  quotes, commas, semicolons and parentheses are ignored) and **imports only**.
+  bundles and source maps, ORM snapshots (Drizzle `meta/*_snapshot.json` and
+  `meta/_journal.json`, EF Core `*ModelSnapshot.cs` and `Migrations/*.Designer.cs`,
+  Prisma `migration_lock.toml`), files whose first lines say `@generated`,
+  `DO NOT EDIT`, `auto-generated` or `this file was generated`, binaries, pure
+  renames, and four heuristics: **formatting only** (the change disappears once
+  whitespace, quotes, commas, semicolons and parentheses are ignored),
+  **imports only**, **minified or bundled** (a `.js`/`.css`/`.json`/`.svg` line
+  over 1000 characters, or 200 on average) and **large JSON** (500+ added lines,
+  except hand-edited manifests such as `package.json` and `tsconfig.json`).
+  Noise never goes on the ASK WHY list and is never part of the intent map.
 - **Reading order:** contracts & schema → domain → services & data → UI &
   entry points → config & scripts → everything else. Hotspots (any file with
   a high-severity item, together with its tests) jump to the front.
