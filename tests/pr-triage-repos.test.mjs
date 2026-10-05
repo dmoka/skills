@@ -5,9 +5,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseRepoEntry, loadRepoList, preflight, formatTable } from "../skills/pr-triage/scripts/repos.mjs";
+import { parseRepoEntry, loadRepoList, preflight, formatTable, firstLine } from "../skills/pr-triage/scripts/repos.mjs";
 import { adapterFor } from "../skills/pr-triage/scripts/hosts.mjs";
-import { syncCache, cleanCache, cacheDirOf, lockDirOf, prRef } from "../skills/pr-triage/scripts/cache.mjs";
+import { syncCache, cleanCache, cacheDirOf, lockDirOf, lockState, prRef } from "../skills/pr-triage/scripts/cache.mjs";
 import { readCommands } from "../skills/pr-triage/scripts/build.mjs";
 
 const SCRIPTS = fileURLToPath(new URL("../skills/pr-triage/scripts/", import.meta.url));
@@ -373,4 +373,25 @@ test("viewer: every queue link uses the PR key; read commands survive odd home f
   const show = readCommands({ gitDir: "/home/o'neil/$HOME/`x`", base: "refs/heads/main", head: "refs/pr-triage/pr/7" }).show;
   const args = execFileSync("sh", ["-c", show.replace(/^git /, "printf '%s|' ").replace("<path>", "src/a.ts")], { encoding: "utf8" });
   assert.equal(args, "--git-dir|/home/o'neil/$HOME/`x`|show|refs/pr-triage/pr/7:src/a.ts|");
+});
+
+test("a live run's lock: kept however old, and --clean-cache refuses in one line", () => {
+  const home = tmp();
+  const entry = parseRepoEntry("github:acme/shop");
+  const lock = lockDirOf(entry, home);
+  mkdirSync(lock, { recursive: true });
+  writeFileSync(join(lock, "pid"), String(process.pid));
+  const old = new Date(Date.now() - 31 * 60 * 1000);
+  utimesSync(lock, old, old);
+  assert.deepEqual(lockState(lock), { pid: process.pid, stale: false }, "a long sync keeps its lock");
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  for (const args of [["--clean-cache", "github:acme/shop"], ["--clean-cache"]]) {
+    const r = spawnSync(process.execPath, [join(SCRIPTS, "triage.mjs"), ...args], { cwd: home, env, encoding: "utf8" });
+    assert.equal(r.status, 1);
+    assert.equal(r.stderr.trim(), `a pr-triage run (pid ${process.pid}) is using this cache; run --clean-cache again when it ends`);
+  }
+});
+
+test("first lines drop Windows line ends", () => {
+  assert.equal(firstLine("\r\nHTTP 404: Not Found\r\nmore"), "HTTP 404: Not Found");
 });

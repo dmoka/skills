@@ -35,7 +35,10 @@ const now = Date.now();
 if (args["clean-cache"]) {
   const entry = args["clean-cache"] === true ? null : parseRepoEntry(args["clean-cache"]);
   if (entry?.error) { console.error(`${entry.id}: ${entry.error}`); process.exit(1); }
-  const { target, existed } = cleanCache({ entry });
+  let removed;
+  try { removed = cleanCache({ entry }); }
+  catch (e) { console.error(e.message); process.exit(1); } // a run holds it, or a path outside the cache
+  const { target, existed } = removed;
   console.log(existed ? `removed ${target}` : `nothing to remove: ${target} does not exist`);
   process.exit(0);
 }

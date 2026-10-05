@@ -78,7 +78,7 @@ ignores the list.
   `gh` login through `gh auth git-credential`; the cache stores no token. It
   never touches your checkouts. A broken cache is deleted and cloned again.
   One run at a time per repo: a run waits for another (a lock in
-  `~/.cache/pr-triage/.locks`, taken over when its process is gone).
+  `~/.cache/pr-triage/.locks`, taken over only when its process is gone).
   `triage.mjs --clean-cache [github:<owner>/<repo>]` deletes the cache, or
   one repo's; it refuses while a run uses it.
 - **Keys:** a PR is `<owner>-<repo>-<number>` (`dmoka-ticket-bay-33`): its

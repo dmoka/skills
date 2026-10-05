@@ -36,7 +36,7 @@ export function run(cmd, args, { input, env } = {}) {
   return { ok: !r.error && r.status === 0, code: r.status, stdout: r.stdout ?? "", stderr: r.error && !missing ? String(r.error.message) : r.stderr ?? "", missing };
 }
 
-export const firstLine = (s) => String(s ?? "").trim().split("\n").find((l) => l.trim()) ?? "";
+export const firstLine = (s) => String(s ?? "").trim().split(/\r?\n/).find((l) => l.trim())?.trim() ?? "";
 
 // "github:dmoka/ticket-bay" -> { id, host, path, name, error: null }.
 // A bad or unsupported entry keeps its text and carries the reason in `error`.

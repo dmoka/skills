@@ -187,8 +187,10 @@ function headReader(source, pr, repo, files) {
 
 // The exact commands a judge reads a cached PR with: no gh, no checkout, any host.
 export function readCommands({ gitDir, base, head }) {
-  // Single quotes: a home folder with $, ` or " in it still pastes as one argument.
-  const g = `git --git-dir '${String(gitDir).replace(/'/g, "'\\''")}'`;
+  // POSIX shells and PowerShell: single quotes keep $, ` and " literal. cmd.exe
+  // passes single quotes through, so on Windows the path gets double quotes.
+  const q = process.platform === "win32" ? `"${gitDir}"` : `'${String(gitDir).replace(/'/g, "'\\''")}'`;
+  const g = `git --git-dir ${q}`;
   return { gitDir, base, head, diff: `${g} diff ${base}...${head}`, show: `${g} show ${head}:<path>`, grep: `${g} grep -n <pattern> ${head}` };
 }
 

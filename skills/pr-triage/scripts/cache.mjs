@@ -61,8 +61,8 @@ function healthy(dir, run) {
 
 // A lock is a folder holding the owner's pid. It is built under a temporary
 // name and renamed into place, so it never exists without its pid, and the
-// rename fails when another run holds it. A lock whose process is gone, or
-// older than 30 minutes, is taken over.
+// rename fails when another run holds it. A lock whose process is gone is
+// taken over (see lockState).
 function withLock(lock, id, home, fn, { waitMs = 10 * 60 * 1000 } = {}) {
   const start = Date.now();
   const nap = new Int32Array(new SharedArrayBuffer(4));
@@ -86,13 +86,15 @@ function withLock(lock, id, home, fn, { waitMs = 10 * 60 * 1000 } = {}) {
   try { return fn(); } finally { rmSync(lock, { recursive: true, force: true }); }
 }
 
-// { pid, stale }: stale when the pid is dead, the pid file is missing for 30 s, or the lock is 30 minutes old.
+// { pid, stale }: stale when the pid is dead, or the pid file is missing for 30 s.
+// A live pid wins, however long its sync takes; only after 6 hours is a live
+// pid taken for a reused one.
 export function lockState(lock) {
   let age;
   try { age = Date.now() - statSync(lock).mtimeMs; } catch { return { pid: null, stale: false, free: true }; }
   let pid = null;
   try { pid = Number(readFileSync(join(lock, "pid"), "utf8")) || null; } catch { /* no pid file */ }
-  if (age > 30 * 60 * 1000) return { pid, stale: true };
+  if (age > 6 * 60 * 60 * 1000) return { pid, stale: true };
   if (!pid) return { pid, stale: age > 30 * 1000 };
   try { process.kill(pid, 0); return { pid, stale: false }; } catch (e) { return { pid, stale: e.code === "ESRCH" }; }
 }
