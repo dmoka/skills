@@ -43,41 +43,41 @@ matches the file name anywhere (`"*.sql"`).
 
 ## `~/.config/pr-triage/repos.jsonc` — many repos (pr-triage only)
 
-One list per user, in the home folder (`~` on macOS and Linux,
-`%USERPROFILE%` on Windows). No list: pr-triage triages the current repo.
-`triage.mjs --repo owner/name` ignores the list.
+One list per user, in the home folder: `~/.config/pr-triage/repos.jsonc` on
+macOS and Linux, `%USERPROFILE%\.config\pr-triage\repos.jsonc` on Windows.
+No list: pr-triage triages the current repo. `triage.mjs --repo owner/name`
+ignores the list.
 
 ```jsonc
 {
   "repos": [
-    "github:dmoka/ticket-bay",             // github:<owner>/<repo>
-    "azure:contoso/Payments/payments-api", // azure:<org>/<project>/<repo>
+    "github:dmoka/ticket-bay", // github:<owner>/<repo>
+    "github:dmoka/brain-demo", // private repos need read access for your gh login
   ],
 }
 ```
 
-- **Hosts:** `github` needs `gh`, logged in. `azure` needs `az`, the
-  `azure-devops` extension and `az login`. A `gitlab:` entry shows "GitLab is
-  not supported yet". Each repo's own `.github/pr-review.jsonc` is read from
-  its default branch.
+- **Hosts:** GitHub only, through `gh`. `gitlab:` and `azure:` entries print
+  "GitLab is not supported yet" / "Azure DevOps is not supported yet" and are
+  skipped. Each repo's own `.github/pr-review.jsonc` is read from its default
+  branch.
 - **Login check** (pr-triage's `preflight.mjs`; `triage.mjs` prints the
-  same table first), per repo and in order: tool installed (else the install
-  link), logged in (else the login command), can this login read the repo (else
-  "your login can't read this repo; ask for read access"). Only `ready`
-  repos are triaged. Nothing asks for a token, stores a credential or runs a
-  login.
-- **Code cache:** `~/.cache/pr-triage/<host>/<path>`, a bare clone with
-  `--filter=blob:none` and no working tree. Each run fetches every open PR
-  head into `refs/pr-triage/pr/<n>` (GitHub: `refs/pull/<n>/head`; Azure
-  DevOps: the source branch, else `refs/pull/<n>/merge`), each base branch
-  and the default branch into `refs/heads/<branch>`, deletes the refs of
-  closed PRs, and downloads the files at those heads in one batch, so judges
-  read offline. Git borrows the login you have: `gh auth git-credential` for
-  GitHub; for Azure DevOps, the `az login` token as an HTTP header for that
-  fetch only, else your git credential manager.
-  `triage.mjs --clean-cache [<host>:<path>]` deletes the cache, or one repo's.
-- **Keys:** a PR is `<repo slug>-<number>` (`dmoka-ticket-bay-33`): its tour
-  is `tour-<key>.json`, `triage.notes.json` orders keys, the page links
+  same table first), per repo and in order: `git` and `gh` installed (else
+  the install link), `gh` logged in (else `gh auth login`), the login can read
+  the repo (else "your login can't read this repo; ask for read access").
+  Only `ready` repos are triaged. Nothing asks for a token, stores a
+  credential or runs a login.
+- **Code cache:** `~/.cache/pr-triage/github/<owner>/<repo>`, a bare clone
+  with `--filter=blob:none`: no working tree, file contents only where needed.
+  Each run fetches every open PR head (`refs/pull/<n>/head`) into
+  `refs/pr-triage/pr/<n>` and each base branch and the default branch into
+  `refs/heads/<branch>`, deletes the refs of closed PRs, and downloads the
+  files at those heads in one batch, so judges read offline. Git borrows your
+  `gh` login through `gh auth git-credential`; the cache stores no token. It
+  never touches your checkouts. `triage.mjs --clean-cache
+  [github:<owner>/<repo>]` deletes the cache, or one repo's.
+- **Keys:** a PR is `<owner>-<repo>-<number>` (`dmoka-ticket-bay-33`): its
+  tour is `tour-<key>.json`, `triage.notes.json` orders keys, the page links
   `#/pr/<key>`.
 
 ## Built-in defaults

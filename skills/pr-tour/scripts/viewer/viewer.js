@@ -352,7 +352,7 @@ ${overlaps}
   <span class="num hide-sm"><span class="plus">+${pr.additions}</span> <span class="minus">−${pr.deletions}</span></span>
   <span class="pill hide-sm">${plural(pr.filesChanged, "file")}</span>
   <span class="meta hide-sm num">${fmt(readLines)} to read${noiseLines ? ` · ${fmt(noiseLines)} noise` : ""}</span>
-  <span class="grow"></span>${r.read ? `<span class="pill hide-sm">${esc(r.repo)}</span>` : ""}${pr.url ? `<a class="meta mono hide-sm" href="${esc(pr.url)}">${r.host === "azure" ? "Azure DevOps" : "GitHub"} ↗</a>` : ""}
+  <span class="grow"></span>${r.read ? `<span class="pill hide-sm">${esc(r.repo)}</span>` : ""}${pr.url ? `<a class="meta mono hide-sm" href="${esc(pr.url)}">GitHub ↗</a>` : ""}
 </header>
 <div class="overlay"></div>
 <div class="shell">

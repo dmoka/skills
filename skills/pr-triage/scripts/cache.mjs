@@ -46,26 +46,22 @@ export function syncCache({ entry, info, prs, adapter, home, run = defaultRun })
   git(["config", "remote.origin.url", info.remoteUrl]);
   git(["symbolic-ref", "HEAD", `refs/heads/${info.defaultBranch}`]);
 
-  // Destination ref -> source refs on the host, first that fetches wins.
-  const want = new Map([[`refs/heads/${info.defaultBranch}`, [`refs/heads/${info.defaultBranch}`]]]);
+  // Destination ref in the cache -> source ref on the host.
+  const want = new Map([[`refs/heads/${info.defaultBranch}`, `refs/heads/${info.defaultBranch}`]]);
   for (const p of prs) {
-    if (p.baseRefName) want.set(`refs/heads/${p.baseRefName}`, [`refs/heads/${p.baseRefName}`]);
-    want.set(prRef(p.number), p.headRefs);
+    if (p.baseRefName) want.set(`refs/heads/${p.baseRefName}`, `refs/heads/${p.baseRefName}`);
+    want.set(prRef(p.number), p.headRef);
   }
   const fetch = (pairs) => git(["fetch", "--quiet", "--no-tags", "--filter=blob:none", "origin", ...pairs.map(([dst, src]) => `+${src}:${dst}`)]);
   const failed = new Map();
-  try { fetch([...want].map(([dst, srcs]) => [dst, srcs[0]])); }
+  try { fetch([...want]); }
   catch {
     // One bad ref fails the whole fetch: retry one by one to find it.
-    for (const [dst, srcs] of want) {
-      const errors = [];
-      for (const src of srcs) {
-        try { fetch([[dst, src]]); errors.length = 0; break; } catch (e) { errors.push(e.message); }
-      }
-      if (errors.length) {
-        const n = dst.startsWith("refs/pr-triage/pr/") ? Number(dst.split("/").pop()) : null;
-        if (n == null) throw new Error(`${entry.id}: could not fetch ${dst} — ${errors[0]}`);
-        failed.set(n, errors[0]);
+    for (const [dst, src] of want) {
+      try { fetch([[dst, src]]); }
+      catch (e) {
+        if (!dst.startsWith("refs/pr-triage/pr/")) throw new Error(`${entry.id}: could not fetch ${dst} — ${e.message}`);
+        failed.set(Number(dst.split("/").pop()), e.message);
       }
     }
   }

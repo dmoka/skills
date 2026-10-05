@@ -2,7 +2,7 @@
 // before every multi-repo triage. pr-triage only. Zero dependencies; Node >= 18.
 //
 // The list lives in one place, <home>/.config/pr-triage/repos.jsonc:
-//   { "repos": ["github:dmoka/ticket-bay", "azure:<org>/<project>/<repo>"] }
+//   { "repos": ["github:dmoka/ticket-bay", "github:<owner>/<repo>"] }
 // No list -> pr-triage triages the current repo, as before.
 //
 // The login check never asks for a token, never stores a credential and
@@ -14,29 +14,26 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseJsonc } from "./lib.mjs";
 
+// Supported hosts. A new host adds an entry here, a check in checkOne and an adapter in hosts.mjs.
 export const HOSTS = {
   github: { tool: "gh", parts: 2, shape: "github:<owner>/<repo>" },
-  azure: { tool: "az", parts: 3, shape: "azure:<org>/<project>/<repo>" },
 };
+// Hosts people will list that pr-triage cannot read yet: a clear line, never a crash.
+const NOT_YET = { gitlab: "GitLab", azure: "Azure DevOps" };
 
 export const INSTALL = {
   git: "https://git-scm.com/downloads",
   gh: "https://cli.github.com",
-  az: "https://learn.microsoft.com/cli/azure/install-azure-cli",
 };
 
 export const listPath = (home = homedir()) => join(home, ".config", "pr-triage", "repos.jsonc");
 
 // Runs a command without a shell; never throws. `missing` means the command is not installed.
-// Windows installs az as az.cmd, which Node only starts through a shell.
 export function run(cmd, args, { input, env } = {}) {
-  const viaShell = process.platform === "win32" && cmd === "az";
-  const r = spawnSync(viaShell ? "az.cmd" : cmd, viaShell ? args.map((a) => `"${String(a).replace(/"/g, '\\"')}"`) : args,
-    { encoding: "utf8", input, env, shell: viaShell, maxBuffer: 256 * 1024 * 1024 });
-  const stderr = r.stderr ?? "";
+  const r = spawnSync(cmd, args, { encoding: "utf8", input, env, maxBuffer: 256 * 1024 * 1024 });
   // ENOTDIR: a PATH entry is a file, and the command is in none of the folders.
-  const missing = ["ENOENT", "ENOTDIR"].includes(r.error?.code) || (viaShell && /is not recognized/.test(stderr));
-  return { ok: !r.error && r.status === 0, code: r.status, stdout: r.stdout ?? "", stderr: r.error && !missing ? String(r.error.message) : stderr, missing };
+  const missing = ["ENOENT", "ENOTDIR"].includes(r.error?.code);
+  return { ok: !r.error && r.status === 0, code: r.status, stdout: r.stdout ?? "", stderr: r.error && !missing ? String(r.error.message) : r.stderr ?? "", missing };
 }
 
 export const firstLine = (s) => String(s ?? "").trim().split("\n").find((l) => l.trim()) ?? "";
@@ -50,9 +47,9 @@ export function parseRepoEntry(text) {
   const host = m[1].toLowerCase();
   const path = m[2].trim().replace(/^\/+|\/+$/g, "");
   const id = `${host}:${path}`;
-  if (host === "gitlab") return { id, host, path, error: "GitLab is not supported yet" };
+  if (NOT_YET[host]) return { id, host, path, error: `${NOT_YET[host]} is not supported yet` };
   const spec = HOSTS[host];
-  if (!spec) return { id, host, path, error: `unknown host "${host}" — use github: or azure:` };
+  if (!spec) return { id, host, path, error: `unknown host "${host}" — use github:` };
   const parts = path.split("/");
   // Each part becomes a folder of the cache, so "." and ".." are refused.
   if (parts.length !== spec.parts || parts.some((p) => !p.trim() || p === "." || p === ".." || /[\\\x00-\x1f]/.test(p))) {
@@ -70,7 +67,7 @@ export function loadRepoList(home = homedir()) {
   try { data = parseJsonc(readFileSync(path, "utf8")); }
   catch (e) { throw new Error(`${path}: not valid JSONC — ${e.message}`); }
   if (!Array.isArray(data?.repos) || data.repos.some((r) => typeof r !== "string")) {
-    throw new Error(`${path}: expected { "repos": ["github:owner/repo", "azure:org/project/repo"] }`);
+    throw new Error(`${path}: expected { "repos": ["github:owner/repo", ...] }`);
   }
   const repos = [];
   const slugs = new Set();
@@ -94,7 +91,8 @@ export function preflight(entries, { run: exec = run } = {}) {
 }
 
 const CANNOT_READ = "your login can't read this repo; ask for read access";
-const NETWORK = /could not resolve|timed? ?out|network|ENOTFOUND|ECONNRESET|connection (refused|reset)/i;
+// gh says "Could not resolve to a Repository" for a repo the login cannot see: that is not the network.
+const NETWORK = /could not resolve host|no such host|timed? ?out|network is unreachable|ENOTFOUND|ECONNRESET|connection (refused|reset)/i;
 const cannotRead = (r) => (NETWORK.test(r.stderr) ? `network error: ${firstLine(r.stderr)}` : CANNOT_READ);
 
 function checkOne(e, exec, once) {
@@ -102,25 +100,15 @@ function checkOne(e, exec, once) {
   const tool = HOSTS[e.host].tool;
   const fail = (status) => ({ tool, ready: false, status });
   if (once("git", () => exec("git", ["--version"])).missing) return fail(`git not installed — install: ${INSTALL.git}`);
-  if (e.host === "github") {
-    if (once("gh", () => exec("gh", ["--version"])).missing) return fail(`gh not installed — install: ${INSTALL.gh}`);
-    // --active: a stale second account must not hide a working one. gh before 2.40 has no --active.
-    const auth = once("gh-auth", () => {
-      const r = exec("gh", ["auth", "status", "--active", "--hostname", "github.com"]);
-      return /unknown flag/.test(r.stderr) ? exec("gh", ["auth", "status", "--hostname", "github.com"]) : r;
-    });
-    if (!auth.ok) return fail("not logged in — run: gh auth login");
-    const r = exec("gh", ["repo", "view", e.path, "--json", "nameWithOwner"]);
-    return r.ok ? { tool, ready: true, status: "ready" } : fail(cannotRead(r));
-  }
-  // azure
-  if (once("az", () => exec("az", ["--version"])).missing) return fail(`az not installed — install: ${INSTALL.az}`);
-  if (!once("az-devops", () => exec("az", ["extension", "show", "--name", "azure-devops", "--output", "none"])).ok) {
-    return fail("azure-devops extension missing — run: az extension add --name azure-devops");
-  }
-  if (!once("az-auth", () => exec("az", ["account", "show", "--output", "none"])).ok) return fail("not logged in — run: az login");
-  const [org, project, repo] = e.path.split("/");
-  const r = exec("az", ["repos", "show", "--repository", repo, "--project", project, "--org", `https://dev.azure.com/${org}`, "--output", "none"]);
+  // github
+  if (once("gh", () => exec("gh", ["--version"])).missing) return fail(`gh not installed — install: ${INSTALL.gh}`);
+  // --active: a stale second account must not hide a working one. gh before 2.40 has no --active.
+  const auth = once("gh-auth", () => {
+    const r = exec("gh", ["auth", "status", "--active", "--hostname", "github.com"]);
+    return /unknown flag/.test(r.stderr) ? exec("gh", ["auth", "status", "--hostname", "github.com"]) : r;
+  });
+  if (!auth.ok) return fail("not logged in — run: gh auth login");
+  const r = exec("gh", ["repo", "view", e.path, "--json", "nameWithOwner"]);
   return r.ok ? { tool, ready: true, status: "ready" } : fail(cannotRead(r));
 }
 
