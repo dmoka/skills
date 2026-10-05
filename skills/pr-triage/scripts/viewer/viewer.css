@@ -251,3 +251,7 @@ tr.qrow:hover .title>a:first-child{text-decoration:underline;text-decoration-col
 .go-tour{color:var(--green);background:var(--green-bg);border-color:oklch(0.76 0.15 152 / 0.35);font-weight:500}
 .go-tour:hover{background:oklch(0.76 0.15 152 / 0.2)}
 tr.qrow:hover .go-tour{background:oklch(0.76 0.15 152 / 0.2)}
+.pill.repo{font-family:var(--mono);margin-right:8px;color:var(--fg)}
+.rfilter{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400;color:var(--mfg);display:flex;gap:6px;align-items:center}
+.rfilter select{font:inherit;color:var(--fg);background:var(--muted);border:1px solid var(--border2);border-radius:4px;padding:2px 6px}
+tr[hidden]{display:none}

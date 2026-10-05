@@ -117,7 +117,8 @@
       current = key;
       if (r.pr && DATA.tours?.[r.pr]) app.innerHTML = renderTour(DATA.tours[r.pr], r.pr);
       else app.innerHTML = DATA.triage ? renderQueue(DATA.triage) : `<div class="main"><p class="empty">Nothing to show.</p></div>`;
-      document.title = r.pr && DATA.tours?.[r.pr] ? `#${r.pr} · ${DATA.tours[r.pr].pr.title}` : `Triage · ${DATA.triage?.repo ?? ""}`;
+      const tour = r.pr && DATA.tours?.[r.pr];
+      document.title = tour ? `${tour.read ? `${tour.repo}` : ""}#${tour.pr.number} · ${tour.pr.title}` : `Triage · ${repoLabel(DATA.triage)}`;
       wire();
       if (!r.at) window.scrollTo(0, 0);
     }
@@ -133,36 +134,56 @@
   window.addEventListener("hashchange", route);
 
   // ---------- queue ----------
+  // One repo: a PR is keyed by its number. Many repos: by "<repo slug>-<number>",
+  // and each row carries its repo.
+  const keyOf = (p) => String(p.key ?? p.number);
+  const prHref = (p) => `#/pr/${encodeURIComponent(keyOf(p))}`;
+  // Many repos: count the triaged ones; the others are counted apart.
+  const repoLabel = (t) => {
+    if (t?.repo || !t?.repos) return t?.repo ?? "";
+    const off = t.repos.filter((r) => !r.ready).length;
+    return plural(t.repos.length - off, "repo") + (off ? ` · ${off} not triaged` : "");
+  };
+  let repoFilter = "";
   function renderQueue(t) {
     const prs = t.prs;
     const judged = prs.filter((p) => p.attention).length;
     const count = (lvl) => prs.filter((p) => p.attention?.level === lvl).length;
     const at = (p, file, line, side) => {
-      const tour = DATA.tours?.[p.number];
+      const tour = DATA.tours?.[keyOf(p)];
       const i = tour ? tour.order.findIndex((o) => o.path === file) : -1;
-      return i < 0 ? `#/pr/${p.number}` : `#/pr/${p.number}?at=f${i}${line != null ? (side === "old" ? "-o" : "-n") + line : ""}`;
+      return i < 0 ? prHref(p) : `${prHref(p)}?at=f${i}${line != null ? (side === "old" ? "-o" : "-n") + line : ""}`;
     };
     const rows = prs.map((p, i) => {
       const a = p.attention;
-      const has = !!DATA.tours?.[p.number];
-      return `<tr${has ? ` class="qrow" tabindex="0" data-href="#/pr/${p.number}" aria-label="Open the tour of #${p.number}"` : ""}>
+      const has = !!DATA.tours?.[keyOf(p)];
+      return `<tr${has ? ` class="qrow" tabindex="0" data-href="${prHref(p)}" aria-label="Open the tour of #${p.number}"` : ""}${p.repo ? ` data-repo="${esc(p.repo)}"` : ""}${repoFilter && p.repo !== repoFilter ? " hidden" : ""}>
   <td class="rank r">${p.rank ?? i + 1}</td>
   <td>${att(a?.level)}</td>
   <td>
-    <div class="title"><a href="${has ? `#/pr/${p.number}` : esc(p.url)}">${esc(p.title)}</a><a class="n" href="${esc(p.url)}">#${p.number}</a><span class="n" style="font-family:var(--sans)">${esc(p.author ?? "")}</span>${p.draft ? ` <span class="pill">draft</span>` : ""}${(p.labels ?? []).map((l) => ` <span class="pill">${esc(l)}</span>`).join("")}</div>
+    <div class="title">${p.repo ? `<span class="pill repo" title="${esc(p.repoId ?? p.repo)}">${esc(p.repo)}</span>` : ""}<a href="${has ? prHref(p) : esc(p.url)}">${esc(p.title)}</a><a class="n" href="${esc(p.url)}">#${p.number}</a><span class="n" style="font-family:var(--sans)">${esc(p.author ?? "")}</span>${p.draft ? ` <span class="pill">draft</span>` : ""}${(p.labels ?? []).map((l) => ` <span class="pill">${esc(l)}</span>`).join("")}</div>
     ${a ? `<div class="model what">${inline(a.whatHappened)}</div><div class="whyline">${inline(a.why)}${a.file ? ` <a class="mono ev" href="${at(p, a.file, a.line, a.side)}">${esc(base(a.file))}${a.line != null ? ":" + a.line : ""}</a>` : ""}</div>` : ""}
     ${p.highFacts?.length ? `<div class="facts">${p.highFacts.slice(0, 3).map((f) => `<div>${inline(f.text)} <a class="mono" style="color:var(--dim)" href="${at(p, f.file, f.line, f.side)}">${esc(base(f.file))}${f.line ? ":" + f.line : ""}</a></div>`).join("")}</div>` : ""}
   </td>
   <td class="r num">${fmt(p.readLines)}<div style="color:var(--dim);white-space:nowrap">${p.noiseLines ? `+${fmt(p.noiseLines)} noise` : plural(p.filesChanged, "file")}</div></td>
   <td class="r num">${age(p.ageDays)}</td>
-  <td class="r">${has ? `<a class="go go-tour" href="#/pr/${p.number}">Tour →</a>` : ""}</td>
+  <td class="r">${has ? `<a class="go go-tour" href="${prHref(p)}">Tour →</a>` : ""}</td>
 </tr>`;
     }).join("");
+    const byKey = new Map(prs.map((p) => [keyOf(p), p]));
+    const chip = (k) => { const p = byKey.get(String(k)); return `<a class="fchip" href="#/pr/${encodeURIComponent(k)}">${p?.repo ? esc(p.repo.split("/").pop()) : ""}#${esc(p?.number ?? k)}</a>`; };
     const overlaps = (t.overlaps ?? []).length ? `
 <section class="sec"><div class="sec-h">PRs that change the same files <span class="count">merge order matters</span></div>
-<div class="box"><table><tbody>${t.overlaps.slice(0, 12).map((o) => `<tr><td class="mono" style="width:55%">${esc(o.file)}</td><td>${o.prs.map((n) => `<a class="fchip" href="#/pr/${n}">#${n}</a>`).join(" ")}</td></tr>`).join("")}${t.overlaps.length > 12 ? `<tr><td colspan="2" class="empty">+${t.overlaps.length - 12} more files</td></tr>` : ""}</tbody></table></div></section>` : "";
+<div class="box"><table><tbody>${t.overlaps.slice(0, 12).map((o) => `<tr><td class="mono" style="width:55%">${o.repo ? `<span class="pill">${esc(o.repo)}</span> ` : ""}${esc(o.file)}</td><td>${o.prs.map(chip).join(" ")}</td></tr>`).join("")}${t.overlaps.length > 12 ? `<tr><td colspan="2" class="empty">+${t.overlaps.length - 12} more files</td></tr>` : ""}</tbody></table></div></section>` : "";
+    // Many repos: the ones the login check stopped, and PRs that could not be read, go first.
+    const blocked = (t.repos ?? []).filter((r) => !r.ready || r.skipped?.length);
+    const notTriaged = blocked.length ? `
+<section class="sec"><div class="sec-h">Not triaged <span class="count">fix these, then run again</span></div>
+<div class="box"><table><tbody>${blocked.map((r) => `<tr><td class="mono" style="width:34%">${esc(r.id)}</td><td>${r.ready ? `${plural(r.skipped.length, "PR")} skipped: ${r.skipped.map((s) => `#${esc(s.number)} ${esc(s.reason)}`).join("; ")}` : esc(r.status)}</td></tr>`).join("")}</tbody></table></div></section>` : "";
+    const shown = (t.repos ?? []).filter((r) => r.ready && r.path);
+    const filter = shown.length > 1 ? `<label class="rfilter">Repo <select id="repo-filter"><option value="">All ${shown.length} repos</option>${shown.map((r) => `<option value="${esc(r.path)}"${r.path === repoFilter ? " selected" : ""}>${esc(r.path)} (${r.open})</option>`).join("")}</select></label>` : "";
     return `
-<header class="topbar"><span class="mark"><i></i>PR Triage</span><span class="sep">/</span><span class="mono meta">${esc(t.repo)}</span><span class="grow"></span><span class="meta hide-sm">${esc(when(t.generatedAt))}</span></header>
+<header class="topbar"><span class="mark"><i></i>PR Triage</span><span class="sep">/</span><span class="mono meta">${esc(repoLabel(t))}</span><span class="grow"></span><span class="meta hide-sm">${esc(when(t.generatedAt))}</span></header>
 <main class="main" style="max-width:1240px;margin:0 auto">
 <section class="sec">
 <h1 style="margin-top:4px">What needs your attention first</h1>
@@ -175,7 +196,8 @@
   <div><div class="k">Noise, collapsed</div><div class="v">${fmt(prs.reduce((s, p) => s + p.noiseLines, 0))}<small>lines</small></div></div>
 </div></section>
 ${t.summary ? `<section class="sec"><div class="sec-h">Summary ${MODEL}</div><div class="model">${inline(t.summary)}</div></section>` : ""}
-<section class="sec"><div class="sec-h">Queue <span class="count">${prs.length} · most attention first</span></div>
+${notTriaged}
+<section class="sec"><div class="sec-h">Queue <span class="count">${prs.length} · most attention first</span>${filter}</div>
 <div class="box"><table>
 <thead><tr><th class="r">#</th><th>Attention</th><th>Pull request · what happened · why</th><th class="r">To read</th><th class="r">Age</th><th></th></tr></thead>
 <tbody>${rows}</tbody></table></div></section>
@@ -336,7 +358,7 @@ ${overlaps}
   <span class="num hide-sm"><span class="plus">+${pr.additions}</span> <span class="minus">−${pr.deletions}</span></span>
   <span class="pill hide-sm">${plural(pr.filesChanged, "file")}</span>
   <span class="meta hide-sm num">${fmt(readLines)} to read${noiseLines ? ` · ${fmt(noiseLines)} noise` : ""}</span>
-  <span class="grow"></span>${pr.url ? `<a class="meta mono hide-sm" href="${esc(pr.url)}">GitHub ↗</a>` : ""}
+  <span class="grow"></span>${r.read ? `<span class="pill hide-sm">${esc(r.repo)}</span>` : ""}${pr.url ? `<a class="meta mono hide-sm" href="${esc(pr.url)}">GitHub ↗</a>` : ""}
 </header>
 <div class="overlay"></div>
 <div class="shell">
@@ -384,6 +406,12 @@ ${overlaps}
       overlay.onclick = close;
       side.querySelectorAll("a").forEach((x) => x.addEventListener("click", () => { if (innerWidth <= 900) close(); }));
     }
+    // The repo filter hides the other repos' rows and stays set until the page reloads.
+    const rf = app.querySelector("#repo-filter");
+    if (rf) rf.onchange = () => {
+      repoFilter = rf.value;
+      for (const row of app.querySelectorAll("tr[data-repo]")) row.hidden = !!repoFilter && row.dataset.repo !== repoFilter;
+    };
     // A queue row opens its tour; links inside the row keep their own target.
     for (const row of app.querySelectorAll("tr.qrow")) {
       row.addEventListener("click", (e) => { if (!e.target.closest("a") && !getSelection().toString()) location.hash = row.dataset.href.slice(1); });

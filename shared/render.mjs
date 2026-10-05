@@ -27,13 +27,13 @@ if (report.kind === "triage") {
   const tours = {};
   for (const p of report.prs) {
     const path = join(dir, p.tour);
-    if (existsSync(path)) tours[p.number] = JSON.parse(readFileSync(path, "utf8"));
+    if (existsSync(path)) tours[p.key ?? p.number] = JSON.parse(readFileSync(path, "utf8"));
   }
   data = { triage: report, tours };
   outPath = args.out ?? join(dir, "review.html");
-  title = `Triage · ${report.repo}`;
+  title = `Triage · ${report.repo ?? `${report.repos?.length ?? 0} repos`}`;
   // One file now holds the queue and every tour; drop pages from older layouts.
-  for (const f of readdirSync(dir)) if (/^(triage|tour-\d+)\.html$/.test(f)) rmSync(join(dir, f));
+  for (const f of readdirSync(dir)) if (/^(triage|tour-.+)\.html$/.test(f)) rmSync(join(dir, f));
 } else if (report.kind === "tour") {
   data = { tours: { [report.pr.number]: report } };
   outPath = args.out ?? input.replace(/\.json$/, ".html");

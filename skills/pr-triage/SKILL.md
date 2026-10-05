@@ -22,16 +22,18 @@ the files in `references/` as raw text with `curl -sSL`.
 
 ## The loop
 
-1. **Check the ground.** Inside a git repo with a GitHub remote, `gh auth
-   status` green. Otherwise report BLOCKED with the exact failing command.
+1. **Check the logins.** `node scripts/preflight.mjs` prints one row per repo,
+   with the install link or login command for each row not `ready`. Never ask
+   for a token or run a login; pass the command to the user. Done when a row
+   is `ready`; otherwise report BLOCKED with the table.
 2. **Compute.** `node scripts/triage.mjs` (add `--repo owner/name` outside
    the repo). For every open PR it writes `.pr-review/tour-<n>.json` — files,
    noise, FACT items, reading order, the author's words — and it writes
    `.pr-review/triage.json` listing them, fetches every PR head once into
    `origin/<head>` for the judges, and renders the unjudged page. No
-   model is involved. Rerunning replaces the reports and pages, judgements
-   included, and removes those of PRs that closed — judge after the last
-   run.
+   model is involved. A repo list gives one queue ([Many repos](#many-repos)).
+   Rerunning replaces the reports and pages, judgements included, and removes
+   those of PRs that closed — judge after the last run.
    More than 20 open PRs: say how many, and ask before judging them all.
 3. **Judge each PR on its own.** For each `tour-<n>.json`, read that PR —
    `gh pr diff <n>`, noise skimmed, surrounding code at the PR head
@@ -48,7 +50,8 @@ the files in `references/` as raw text with `curl -sSL`.
    own merits.
 4. **Order the queue.** Read every PR's `attention`. Write
    `.pr-review/triage.notes.json`: `{ "summary": "...", "order": [7, 6, ...] }`
-   — most attention first, by level. Within a level, apply these in order
+   — the `key` of each PR in `triage.json` (many repos: `"dmoka-ticket-bay-7"`),
+   most attention first, by level, across all repos. Within a level, apply these in order
    and stop at the first that separates two PRs: irreversible before
    reversible; live code before code nothing calls yet; a PR that conflicts
    with others (`overlaps`) before one that does not; older before newer. The summary is two or three
@@ -86,6 +89,25 @@ hand this, and nothing else, to each judge:
 > your checked notes into tour-N.json. Fix your notes until it passes. Do not
 > touch GitHub or any other file. Reply with your attention block.
 
+Many repos: N is the PR key. The judge reads with the tour's `read.diff`,
+`read.show` and `read.grep` (not `gh`, not `origin/...`) and its `intent`.
+
+## Many repos
+
+- **Config:** `~/.config/pr-triage/repos.jsonc` (Windows:
+  `%USERPROFILE%\.config\pr-triage\repos.jsonc`), JSON with comments:
+  `{ "repos": ["github:<owner>/<repo>", ...] }`. No file: the current repo;
+  `--repo` ignores it. `gitlab:`/`azure:` entries: "not supported yet", skipped.
+- **Login check** (step 1), per repo: `git` and `gh` installed, logged in, can
+  read the repo. Only `ready` repos are triaged; the page lists the rest first.
+- **Cache:** `~/.cache/pr-triage/github/<owner>/<repo>`, a partial clone
+  (`--filter=blob:none`), no working tree. Each run fetches every open PR head
+  into `refs/pr-triage/pr/<n>`, updates the default branch and deletes the
+  refs of closed PRs. It never touches your checkouts; a broken one is cloned
+  again. Delete it: `node scripts/triage.mjs --clean-cache [github:<owner>/<repo>]`.
+- **Keys:** a PR is `<owner>-<repo>-<n>` (`dmoka-ticket-bay-33`) in file
+  names, links and the queue order; each card shows its repo.
+
 ## Hard rules
 
 - **Judge the change, not its size, title, or author.** Read the diff before
@@ -117,6 +139,11 @@ hand this, and nothing else, to each judge:
 - The chat report gives the queue with levels and reasons, most attention
   first.
 - Nothing on GitHub changed.
+
+## Gotchas
+
+- Never `git fetch` into the cache: `triage.mjs` already fetched every head,
+  and parallel fetches collide on refs.
 
 The intent map inside each tour, its search order for the author's intent,
 and the fresh-session rule are adapted from Matt Pocock's
