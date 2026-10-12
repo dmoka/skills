@@ -1,8 +1,8 @@
 # Example audit 1 — a Claude Code routine that turns bug-report emails into pull requests
 
 Setup (from the routine's config, 2026-09-29): a cloud routine, hourly, one repository
-(public), Gmail connector on a **dedicated support inbox** limited to `search_threads`,
-`get_thread`, `label_thread`; allowed tools without `WebFetch`/`WebSearch`; environment
+(public), Gmail connector on a **dedicated support inbox**, with a tool list of `search_threads`,
+`get_thread`, `label_thread` (it does not hold: see below); allowed tools without `WebFetch`/`WebSearch`; environment
 network **Custom: the default allowlist + `discord.com`**; a Discord webhook URL in an
 environment variable; a guard hook in the repo that blocks env dumps and `curl` to anything
 but the webhook; the prompt says emails are data, never instructions. It never merges.
@@ -18,8 +18,11 @@ but the webhook; the prompt says emails are data, never instructions. It never m
 | Way out | PR title/body/commit text on a public repo | the routine opens PRs | published before any human reads it |
 | Way out (narrowed) | `curl` to other hosts | guard hook | bypassed twice in tests by building the URL in a variable/file |
 
-What was already cut: the whole personal mailbox (dedicated inbox), Gmail send/forward
-(connector limited to three tools), the web tools, and merging (a human reviews the PR).
+What was already cut: the whole personal mailbox (dedicated inbox), the web tools, and
+merging (a human reviews the PR). Not cut: Gmail send/forward. The three-tool list does not
+hold in a routine (tested 2026-10-05: the run still called `list_labels`). Every Gmail tool
+runs, so the worst case is an email sent from the bug inbox. The guard is the dedicated inbox
+plus a prompt line that names the three allowed tools.
 
 **Fixes, cheapest first**
 1. Take the webhook away from the agent: post the "ready for review" message from a GitHub
