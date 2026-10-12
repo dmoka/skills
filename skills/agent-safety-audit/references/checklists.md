@@ -24,7 +24,7 @@ Docs: https://code.claude.com/docs/en/routines · https://code.claude.com/docs/e
 
 | Look at | Opens |
 |---|---|
-| Connectors on the routine and their permitted tools | input (read tools), private data (mailbox scope), a way out (send/forward/post tools) — connector traffic skips the network allowlist |
+| Connectors on the routine, and the account behind each one | input (read tools), private data (mailbox scope), a way out (send/forward/post tools) — connector traffic skips the network allowlist. Every tool of an included claude.ai connector runs: a per-tool limit does not hold in a routine (tested 2026-10-05: a Gmail connector limited to three tools still ran `list_labels`). Do not recommend per-tool limits. Recommend: remove every connector the routine doesn't need, and connect the rest to a dedicated account or inbox with nothing private in it. |
 | Environment network: None / Trusted / Custom, and each allowed domain | the way out; whole domains like `discord.com` allow any account on them |
 | Environment variables | readable by every command in the session |
 | Number of repositories | more than one → the repos' hooks and permission rules don't load |
