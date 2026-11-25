@@ -47,11 +47,4 @@ Done when each load-bearing rule in the area has a property test.
 
 ## Libraries
 
-| Stack | Library | Fixed seed and run count |
-|---|---|---|
-| JavaScript/TypeScript | fast-check https://fast-check.dev/ | `fc.assert(prop, { seed: 42, numRuns: 50 })` |
-| Python | Hypothesis https://hypothesis.readthedocs.io/ | `@settings(derandomize=True, max_examples=50)` |
-| Java/Kotlin | jqwik https://jqwik.net/ | `@Property(seed = "42", tries = 50)` |
-| .NET | FsCheck https://fscheck.github.io/FsCheck/ | `Config`: `MaxTest`, `Replay` |
-| Rust | proptest https://proptest-rs.github.io/proptest/ | `ProptestConfig`: `cases`, `rng_seed` |
-| Go | rapid https://pkg.go.dev/pgregory.net/rapid | `-rapid.seed`, `-rapid.checks` |
+The library per stack, its fixed-seed and run-count syntax, generator statistics and replay live in one place: the `property-testing` skill, [libraries.md](../../property-testing/references/libraries.md) (raw: https://raw.githubusercontent.com/dmoka/skills/main/skills/property-testing/references/libraries.md). For a property beyond the crash hunt (roundtrip, oracle, model-based), with a planted mutant per property and an escape-hatch count, use that skill.
