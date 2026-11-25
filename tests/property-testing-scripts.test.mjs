@@ -239,3 +239,12 @@ test("freeze: a range past the end and a missing file exit 2", () => {
   assert.equal(run("freeze.sh", dir, "p.py:1-5").code, 2);
   assert.equal(run("freeze.sh", dir, "nope.py").code, 2);
 });
+
+test("plant-mutant: a same-size Python mutant leaves no stale .pyc behind", () => {
+  const dir = repo({ "account.py": ACCOUNT, "check.py": checker("assert withdraw(10, 10) == 0") });
+  // warm the cache with the original, as a test run before the mutant does
+  assert.equal(spawnSync("python3", ["check.py"], { cwd: dir }).status, 0);
+  const { code } = run("plant-mutant.sh", dir, "account.py", "2", "amount > balance", "amount + balance", "--", "python3", "check.py");
+  assert.equal(code, 0);
+  assert.equal(spawnSync("python3", ["check.py"], { cwd: dir }).status, 0, "the original code runs again after the restore");
+});

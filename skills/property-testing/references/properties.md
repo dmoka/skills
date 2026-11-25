@@ -86,10 +86,13 @@ tautology: it passes on every bug.
 ## What property tests cannot see
 
 - **Needles.** A bug at one value (`if amount == 7_777_777`) or one date is hit with a
-  probability near zero by random generation. Libraries bias toward small and boundary
-  values, not toward arbitrary constants in the code. Read the code for `==` against a
-  literal, lookup tables and special dates, and name each in the report; an example test
-  covers them, a property does not.
+  probability near zero by random generation. fast-check, proptest, jqwik and rapid bias
+  toward small and boundary values, not toward arbitrary constants in the code. Recent
+  Hypothesis versions also feed literals from the code under test into generation, so a
+  needle like `== 3_133_700` can be found there (verified with Hypothesis 6.170); do not
+  count on it in other libraries, or for a needle computed at run time. Read the code for
+  `==` against a literal, lookup tables and special dates, and name each in the report as
+  found or unseen; an example test covers an unseen one, a property does not.
 - **Unwritten rules.** A property checks only the rule it states.
 - **Generator blind spots.** Inputs outside the generator's range or shape: sizes beyond
   `max_size`, characters the string strategy excludes, states the command generator never

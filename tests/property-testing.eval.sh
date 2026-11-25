@@ -45,7 +45,7 @@ run_claude() {  # $1 = dir; transcript lands in $1.transcript.jsonl
 }
 ran() { grep -Eq -- "\"command\":\"[^\"]*$2" "$1.transcript.jsonl"; }       # a Bash call ran this
 said() { grep '"type":"result"' "$1.transcript.jsonl" | grep -Eiq -- "$2"; }     # the final report says it
-tests_say() { grep -rEil -- "suspected bug" "$1" --include='*.py' --include='*.ts' --include='*.rs' | grep -v '/.claude/' | xargs grep -Eiq -- "$2"; }
+tests_say() { grep -rEil --include='*.py' --include='*.ts' --include='*.rs' -- "suspected bug" "$1" | grep -v '/.claude/' | xargs grep -Eiq -- "$2"; }
 
 eval_fixture() {  # $1 fixture, $2 source path, $3 withdraw regex, $4 roundtrip regex, $5 needle regex
   echo "== $1 =="

@@ -25,6 +25,10 @@ cp -p "$file" "$backup"
 restore() { cat "$backup" > "$file"; rm -f "$backup"; }
 trap restore EXIT INT TERM
 
+# A new second before each write: the mutant and the restored file never share an mtime
+# second with the version before them, so mtime-keyed caches (Python's .pyc keys on mtime
+# seconds and size, make, tsc --incremental) see each change.
+sleep 1
 OLD=$old NEW=$new LINE=$line awk '
   NR == ENVIRON["LINE"] { i = index($0, ENVIRON["OLD"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["NEW"] substr($0, i + length(ENVIRON["OLD"])) }
   { print }' "$backup" > "$file"
@@ -35,12 +39,14 @@ echo "running: $*"
 
 out=$(mktemp "${TMPDIR:-/tmp}/plant-mutant-out.XXXXXX")
 set +e
-"$@" > "$out" 2>&1
+# No .pyc written for the mutant, so none can outlive the restore.
+PYTHONDONTWRITEBYTECODE=1 "$@" > "$out" 2>&1
 status=$?
 set -e
 tail -n 20 "$out"
 rm -f "$out"
 
+sleep 1
 restore
 trap - EXIT INT TERM
 if [ "$(sed -n "${line}p" "$file")" != "$original_line" ]; then echo "FILE NOT RESTORED: $file" >&2; exit 2; fi
