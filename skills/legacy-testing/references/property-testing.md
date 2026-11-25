@@ -28,10 +28,10 @@ An entry point is where outside input enters the target: an HTTP endpoint, a CLI
 5. When a run fails, take the shrunk input and:
    - Add it as a normal test that pins today's response, named `pins current behaviour — suspected bug: <input> crashes with <error>` (see `characterize.md`).
    - Add it to the suspected-bugs list in the final report.
-   - Exclude that input class from the generator, with a comment that names the pinned test, so the property stays green and keeps hunting for other crashes.
+   - Leave the property red. Excluding the input class from the generator hides the bug, so it is an escape hatch: ask the user once, and exclude it only after a yes, with a comment that names the pinned test. Without a yes, the property stays red and the report says so.
    - Do not fix the crash. A fix changes behaviour; the user decides on it after the report.
 
-Done when every entry point of the target has a crash-hunt property, a local hunt of 1,000 runs per property finds no new crash, and every crash found is pinned and listed.
+Done when every entry point of the target has a crash-hunt property, a local hunt of 1,000 runs per property finds no new crash, every crash found is pinned and listed, and every excluded input class has the user's yes.
 
 ## 2. Business invariants
 
@@ -47,11 +47,4 @@ Done when each load-bearing rule in the area has a property test.
 
 ## Libraries
 
-| Stack | Library | Fixed seed and run count |
-|---|---|---|
-| JavaScript/TypeScript | fast-check https://fast-check.dev/ | `fc.assert(prop, { seed: 42, numRuns: 50 })` |
-| Python | Hypothesis https://hypothesis.readthedocs.io/ | `@settings(derandomize=True, max_examples=50)` |
-| Java/Kotlin | jqwik https://jqwik.net/ | `@Property(seed = "42", tries = 50)` |
-| .NET | FsCheck https://fscheck.github.io/FsCheck/ | `Config`: `MaxTest`, `Replay` |
-| Rust | proptest https://proptest-rs.github.io/proptest/ | `ProptestConfig`: `cases`, `rng_seed` |
-| Go | rapid https://pkg.go.dev/pgregory.net/rapid | `-rapid.seed`, `-rapid.checks` |
+The library per stack, its fixed-seed and run-count syntax, generator statistics and replay live in one place: the `property-testing` skill, [libraries.md](../../property-testing/references/libraries.md) (raw: https://raw.githubusercontent.com/dmoka/skills/main/skills/property-testing/references/libraries.md). For a property beyond the crash hunt (roundtrip, oracle, model-based), with a planted mutant per property and an escape-hatch count, use that skill.
