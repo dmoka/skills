@@ -1,0 +1,11 @@
+Kani Rust Verifier 0.68.0 (cargo plugin)
+CBMC 6.11.0
+1 | #![feature(register_tool)]
+Checking harness proofs::parse_never_panics...
+VERIFICATION RESULT:
+ ** 0 of 44 failed (3 unreachable)
+ ** 0 of 3 cover properties satisfied (3 unreachable)
+VERIFICATION:- SUCCESSFUL
+Verification Time: 0.1828435s
+Manual Harness Summary:
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.

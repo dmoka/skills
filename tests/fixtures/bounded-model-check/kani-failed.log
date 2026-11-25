@@ -1,0 +1,13 @@
+Kani Rust Verifier 0.68.0 (cargo plugin)
+CBMC 6.11.0
+1 | #![feature(register_tool)]
+Checking harness proofs::decode_never_panics...
+VERIFICATION RESULT:
+ ** 1 of 58 failed (1 unreachable)
+Failed Checks: index out of bounds: the length is less than or equal to the given index
+ File: "src/lib.rs", line 18, in decode
+VERIFICATION:- FAILED
+Verification Time: 0.17202713s
+Manual Harness Summary:
+Verification failed for - proofs::decode_never_panics
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.

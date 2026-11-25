@@ -1,0 +1,16 @@
+Kani Rust Verifier 0.68.0 (cargo plugin)
+CBMC 6.11.0
+1 | #![feature(register_tool)]
+Checking harness proofs::mid_ok...
+VERIFICATION RESULT:
+ ** 0 of 5 failed
+VERIFICATION:- SUCCESSFUL
+Verification Time: 0.018614667s
+Checking harness proofs::payload_ok...
+VERIFICATION RESULT:
+ ** 0 of 45 failed
+ ** 2 of 2 cover properties satisfied
+VERIFICATION:- SUCCESSFUL
+Verification Time: 0.17744434s
+Manual Harness Summary:
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.
