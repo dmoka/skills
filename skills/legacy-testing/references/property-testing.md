@@ -28,10 +28,10 @@ An entry point is where outside input enters the target: an HTTP endpoint, a CLI
 5. When a run fails, take the shrunk input and:
    - Add it as a normal test that pins today's response, named `pins current behaviour — suspected bug: <input> crashes with <error>` (see `characterize.md`).
    - Add it to the suspected-bugs list in the final report.
-   - Exclude that input class from the generator, with a comment that names the pinned test, so the property stays green and keeps hunting for other crashes.
+   - Leave the property red. Excluding the input class from the generator hides the bug, so it is an escape hatch: ask the user once, and exclude it only after a yes, with a comment that names the pinned test. Without a yes, the property stays red and the report says so.
    - Do not fix the crash. A fix changes behaviour; the user decides on it after the report.
 
-Done when every entry point of the target has a crash-hunt property, a local hunt of 1,000 runs per property finds no new crash, and every crash found is pinned and listed.
+Done when every entry point of the target has a crash-hunt property, a local hunt of 1,000 runs per property finds no new crash, every crash found is pinned and listed, and every excluded input class has the user's yes.
 
 ## 2. Business invariants
 
