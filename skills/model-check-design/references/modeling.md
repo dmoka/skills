@@ -62,6 +62,9 @@ Rules that make the model mean something:
   runs without interruption from other requests in the same process, so it
   is one action. Requests on other processes or servers still interleave:
   model one process per actor when the app runs more than one.
+- **A model of a proposed fix** anchors the unchanged steps to the code and
+  each new step as `model-only — proposed fix: <the statement>`. Keep it in a
+  separate spec (`<Flow>Fixed.tla`) next to the model of the code as it is.
 - **Every actor is an index.** Workers, requests, retries and webhook
   deliveries are elements of a small set; the per-actor program counter `pc`
   says where each one is. The scheduler is TLC: it tries every order.
