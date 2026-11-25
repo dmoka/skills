@@ -1,0 +1,15 @@
+Kani Rust Verifier 0.68.0 (cargo plugin)
+CBMC 6.11.0
+1 | #![feature(register_tool)]
+Checking harness proofs::decode_never_panics...
+VERIFICATION RESULT:
+ ** 1 of 58 failed (57 undetermined)
+Failed Checks: unwinding assertion loop 0
+ File: "src/lib.rs", line 17, in decode
+VERIFICATION:- FAILED
+[Kani] info: Verification output shows one or more unwinding failures.
+[Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.
+Verification Time: 0.073408626s
+Manual Harness Summary:
+Verification failed for - proofs::decode_never_panics
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.

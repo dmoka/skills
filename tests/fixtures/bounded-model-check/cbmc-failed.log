@@ -1,0 +1,47 @@
+CBMC version 6.11.0 (cbmc-6.11.0) 64-bit arm64 macos
+Type-checking harness
+Type-checking parser
+Generating GOTO Program
+Adding CPROVER library (arm64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Starting Bounded Model Checking
+Passing problem to propositional reduction
+converting SSA
+Running propositional reduction
+SAT checker: instance is SATISFIABLE
+Running propositional reduction
+SAT checker: instance is SATISFIABLE
+Running propositional reduction
+SAT checker: instance is SATISFIABLE
+Running propositional reduction
+SAT checker: instance is UNSATISFIABLE
+** Results:
+<builtin-library-malloc> function malloc
+[malloc.assertion.1] line 31 max allocation size exceeded: SUCCESS
+[malloc.assertion.2] line 36 max allocation may fail: SUCCESS
+harness.c function harness
+[harness.assertion.1] line 14 cover: reject branch: FAILURE
+[harness.assertion.2] line 15 cover: accept branch: FAILURE
+parser.c function read_record
+[read_record.pointer_dereference.1] line 9 dereference failure: pointer NULL in buf[(signed long int)1]: SUCCESS
+[read_record.pointer_dereference.2] line 9 dereference failure: pointer invalid in buf[(signed long int)1]: SUCCESS
+[read_record.pointer_dereference.3] line 9 dereference failure: deallocated dynamic object in buf[(signed long int)1]: SUCCESS
+[read_record.pointer_dereference.4] line 9 dereference failure: dead object in buf[(signed long int)1]: SUCCESS
+[read_record.pointer_dereference.5] line 9 dereference failure: pointer outside object bounds in buf[(signed long int)1]: SUCCESS
+[read_record.pointer_dereference.6] line 9 dereference failure: invalid integer address in buf[(signed long int)1]: SUCCESS
+[read_record.unwind.0] line 11 unwinding assertion loop 0: SUCCESS
+[read_record.pointer_dereference.7] line 12 dereference failure: pointer NULL in out[(signed long int)i]: UNKNOWN
+[read_record.pointer_dereference.8] line 12 dereference failure: pointer invalid in out[(signed long int)i]: UNKNOWN
+[read_record.pointer_dereference.9] line 12 dereference failure: deallocated dynamic object in out[(signed long int)i]: UNKNOWN
+[read_record.pointer_dereference.10] line 12 dereference failure: dead object in out[(signed long int)i]: UNKNOWN
+[read_record.pointer_dereference.11] line 12 dereference failure: pointer outside object bounds in out[(signed long int)i]: UNKNOWN
+[read_record.pointer_dereference.12] line 12 dereference failure: invalid integer address in out[(signed long int)i]: UNKNOWN
+[read_record.pointer_dereference.13] line 12 dereference failure: pointer NULL in buf[(signed long int)((unsigned long int)2 + i)]: UNKNOWN
+[read_record.pointer_dereference.14] line 12 dereference failure: pointer invalid in buf[(signed long int)((unsigned long int)2 + i)]: UNKNOWN
+[read_record.pointer_dereference.15] line 12 dereference failure: deallocated dynamic object in buf[(signed long int)((unsigned long int)2 + i)]: UNKNOWN
+[read_record.pointer_dereference.16] line 12 dereference failure: dead object in buf[(signed long int)((unsigned long int)2 + i)]: UNKNOWN
+[read_record.pointer_dereference.17] line 12 dereference failure: pointer outside object bounds in buf[(signed long int)((unsigned long int)2 + i)]: FAILURE
+[read_record.pointer_dereference.18] line 12 dereference failure: invalid integer address in buf[(signed long int)((unsigned long int)2 + i)]: UNKNOWN
+** 3 of 23 failed (4 iterations)
+VERIFICATION FAILED

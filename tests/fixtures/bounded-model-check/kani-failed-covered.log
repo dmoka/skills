@@ -1,0 +1,14 @@
+Kani Rust Verifier 0.68.0 (cargo plugin)
+CBMC 6.11.0
+1 | #![feature(register_tool)]
+Checking harness proofs::never_more_than_balance...
+VERIFICATION RESULT:
+ ** 1 of 2 failed
+ ** 2 of 2 cover properties satisfied
+Failed Checks: assertion failed: r <= balance
+ File: "src/lib.rs", line 37, in proofs::never_more_than_balance
+VERIFICATION:- FAILED
+Verification Time: 0.023367792s
+Manual Harness Summary:
+Verification failed for - proofs::never_more_than_balance
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.
